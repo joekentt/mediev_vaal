@@ -1,0 +1,73 @@
+# --- Derivado: sai do git, volta com `make all` ------------------------------
+# Materiais, áudio, manifesto do mundo, capturas e resultados de bench. Nada aqui é
+# fonte: tudo é reprodutível a partir de tools/. Se um artefato só existe aqui e não
+# tem gerador, ele está errado.
+/assets/generated/
+
+# Override temporário escrito por `make warnings` (removido ao fim; fica aqui para o
+# caso de o processo morrer no meio).
+/override.cfg
+/warning_probe.gd
+
+# Sidecars de UID gerados pelo Godot 4.4+ ao importar. São derivados dos próprios .gd e
+# nascem de novo a cada import. A documentação do Godot sugere versioná-los para manter
+# referências estáveis, mas aqui nada referencia script por UID: os geradores escrevem
+# `path="res://..."`. Ficam de fora, coerentes com o resto do que é derivado.
+*.gd.uid
+
+# --- Cache do Godot ----------------------------------------------------------
+.godot/
+/android/
+
+# Godot 3 legado.
+.import/
+export.cfg
+export_presets.cfg
+
+# --- Builds ------------------------------------------------------------------
+/build/
+/builds/
+/export/
+*.pck
+*.zip
+*.exe
+*.x86_64
+*.apk
+*.aab
+*.dmg
+*.app
+
+# --- Python (o pipeline) -----------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# --- Mono / C# (não usamos, mas evita sujeira) -------------------------------
+.mono/
+data_*/
+mono_crash.*.json
+
+# --- Sistema operacional -----------------------------------------------------
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# --- Editores ----------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Logs e temporários ------------------------------------------------------
+logs/
+*.log
+*.tmp

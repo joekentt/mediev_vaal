@@ -1,0 +1,133 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_project.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+config_version=5
+
+[application]
+
+config/name="Mediev Vaal"
+config/description="RPG 3D low poly de fantasia medieval original, 100% gerado por script."
+run/main_scene="res://scenes/world/main.tscn"
+config/features=PackedStringArray("4.4", "Forward Plus")
+
+[audio]
+
+buses/default_bus_layout="res://assets/generated/audio/default_bus_layout.tres"
+
+[autoload]
+
+EventBus="*res://scripts/core/event_bus.gd"
+GameState="*res://scripts/core/game_state.gd"
+AudioManager="*res://scripts/core/audio_manager.gd"
+TimeSystem="*res://scripts/core/time_system.gd"
+
+[debug]
+
+gdscript/warnings/inferred_declaration=1
+gdscript/warnings/untyped_declaration=1
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/vsync/vsync_mode=1
+
+[input]
+
+move_forward={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":87,"pressed":false)
+, Object(InputEventJoypadMotion,"device":-1,"axis":1,"axis_value":-1)
+]
+}
+move_back={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":83,"pressed":false)
+, Object(InputEventJoypadMotion,"device":-1,"axis":1,"axis_value":1)
+]
+}
+move_left={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":65,"pressed":false)
+, Object(InputEventJoypadMotion,"device":-1,"axis":0,"axis_value":-1)
+]
+}
+move_right={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":68,"pressed":false)
+, Object(InputEventJoypadMotion,"device":-1,"axis":0,"axis_value":1)
+]
+}
+sprint={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194325,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":7,"pressed":false)
+]
+}
+jump={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":32,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":0,"pressed":false)
+]
+}
+interact={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":69,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":2,"pressed":false)
+]
+}
+pause={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194305,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":6,"pressed":false)
+]
+}
+camera_toggle_capture={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194306,"pressed":false)
+]
+}
+camera_zoom_in={
+"deadzone": 0.5,
+"events": [Object(InputEventMouseButton,"device":-1,"button_index":4,"pressed":false)
+]
+}
+camera_zoom_out={
+"deadzone": 0.5,
+"events": [Object(InputEventMouseButton,"device":-1,"button_index":5,"pressed":false)
+]
+}
+debug_screenshot={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194343,"pressed":false)
+]
+}
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="player"
+3d_physics/layer_3="npc"
+3d_physics/layer_4="interactable"
+3d_physics/layer_5="trigger"
+
+[physics]
+
+common/physics_ticks_per_second=60
+3d/run_on_separate_thread=false
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+anti_aliasing/quality/msaa_3d=1
+anti_aliasing/quality/screen_space_aa=0
+anti_aliasing/quality/use_debanding=true
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/positional_shadow/atlas_size=2048
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=3
+occlusion_culling/use_occlusion_culling=true
