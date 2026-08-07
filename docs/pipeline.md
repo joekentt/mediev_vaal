@@ -98,8 +98,27 @@ godot --path . -- --bench --screenshot preview.png --out preview.json --budget d
 O resumo compara os picos com `Params.BUDGET` e devolve a lista de violações.
 `make bench` transforma essa lista em código de saída — é o alvo para CI.
 
-> Medir sem display (headless) dá números de draw call e frame time que não valem nada.
-> `make preview` avisa quando isso acontece. Meça numa sessão com janela.
+> Medir sem display dá números de draw call e frame time que não valem nada. Por isso os
+> alvos de medição **exigem** um display e falham dizendo o porquê, em vez de devolver
+> zeros com cara de resultado. Em CI:
+> `xvfb-run -a -s '-screen 0 1920x1080x24' make bench`.
+
+### O cache de classes globais
+
+O registro de `class_name` (`Params`, `MeshBuilder`, `WorldGenerator`, `SessionProbe`)
+mora em `.godot/global_script_class_cache.cfg`, que só existe depois de um import. Rodar
+o jogo sem ele falha com *"Identifier not declared in the current scope"* — e como o
+`main.gd` não carrega, a janela abre vazia e fica assim **para sempre**, o que se parece
+exatamente com uma medição lenta.
+
+Foi um buraco de verdade: `make warnings` limpava `.godot` ao terminar e o `make preview`
+seguinte pendurava até o timeout. Duas defesas hoje:
+
+- `ensure_imported()` roda um `--import` antes de medir quando o cache não existe — o que
+  também cobre o caso de clone novo.
+- `make warnings` reimporta ao restaurar o `project.godot`, em vez de deixar o cache frio.
+- Quando o Godot estoura o tempo, o erro mostra as linhas de `SCRIPT ERROR` que ele
+  chegou a imprimir, para separar "lento" de "travado".
 
 ## Determinismo
 

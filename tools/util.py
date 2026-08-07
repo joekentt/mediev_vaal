@@ -44,6 +44,9 @@ def report(step: str, written: list[Path]) -> None:
 # segundos. Ajuste com GODOT_TIMEOUT=600 quando for o caso.
 DEFAULT_GODOT_TIMEOUT = int(os.environ.get("GODOT_TIMEOUT", "300"))
 
+# Quantas linhas de erro do Godot mostrar quando ele trava.
+MAX_DIAGNOSTIC_LINES = 8
+
 
 class GodotMissing(RuntimeError):
     """Godot não foi encontrado. Só afeta `make preview` e `make bench`."""
@@ -80,12 +83,46 @@ def run_godot(args: list[str], timeout: int | None = None) -> subprocess.Complet
     try:
         return subprocess.run(command, capture_output=True, text=True, timeout=seconds)
     except subprocess.TimeoutExpired as expired:
+        # Sem o que o Godot chegou a imprimir, "não terminou" é indistinguível de um
+        # erro de script que trava o jogo numa janela vazia. Mostre o que houver.
+        captured = _decode(expired.stdout) + _decode(expired.stderr)
+        diagnostics = [
+            line for line in captured.splitlines()
+            if line.startswith("SCRIPT ERROR") or line.startswith("ERROR")
+        ]
+        detail = ""
+        if diagnostics:
+            joined = "\n    ".join(dict.fromkeys(diagnostics[:MAX_DIAGNOSTIC_LINES]))
+            detail = f"\n\n  O Godot reclamou antes de travar:\n    {joined}"
         raise GodotTimeout(
             f"O Godot não terminou em {seconds}s.\n"
-            f"Sem GPU (llvmpipe, CI headless) a medição fica ordens de grandeza mais lenta.\n"
-            f"Dê mais tempo com GODOT_TIMEOUT=900 make preview, ou reduza\n"
-            f"BENCH_SAMPLE_FRAMES em tools/params.py."
+            f"Sem GPU (llvmpipe, CI headless) a medição fica ordens de grandeza mais "
+            f"lenta — dê mais tempo com GODOT_TIMEOUT=1800.\n"
+            f"Se houver erro de script abaixo, o jogo travou numa janela vazia e o "
+            f"tempo não era o problema.{detail}"
         ) from expired
+
+
+def _decode(stream: bytes | str | None) -> str:
+    if stream is None:
+        return ""
+    if isinstance(stream, bytes):
+        return stream.decode("utf-8", errors="replace")
+    return stream
+
+
+def ensure_imported() -> None:
+    """Garante que o Godot já importou o projeto ao menos uma vez.
+
+    O registro de classes globais (`class_name`) vive em `.godot/`. Sem ele, rodar o
+    jogo direto falha com "Identifier not declared in the current scope" e a janela fica
+    parada para sempre — que foi exatamente o que aconteceu depois de `make warnings`
+    limpar o cache. Clone novo cai no mesmo buraco.
+    """
+    if (ROOT / ".godot" / "global_script_class_cache.cfg").exists():
+        return
+    print("  (importando o projeto: o cache de classes globais não existe ainda)")
+    run_godot(["--headless", "--import"])
 
 
 def fail(message: str) -> None:

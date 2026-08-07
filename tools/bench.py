@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 
 from . import preview
-from .util import GodotMissing, GodotTimeout, ROOT, fail, run_godot
+from .util import GodotMissing, GodotTimeout, ROOT, ensure_imported, fail, run_godot
 
 OUTPUT = ROOT / "assets/generated/bench/bench.json"
 
@@ -20,6 +20,7 @@ def main(argv: list[str] | None = None) -> int:
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     try:
+        ensure_imported()
         process = run_godot(["--", "--bench", "--out", str(OUTPUT), "--budget", budget_key])
     except (GodotMissing, GodotTimeout) as error:
         fail(str(error))
@@ -27,9 +28,7 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = preview._extract_result(process.stdout)
     if summary is None:
-        print(process.stdout)
-        print(process.stderr, file=sys.stderr)
-        fail("O projeto não reportou métricas.")
+        fail(preview.explain_missing_result(process))
         return 1
 
     within_budget = preview.report(summary, budget_key)

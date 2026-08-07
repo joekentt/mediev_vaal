@@ -88,7 +88,11 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         # Regenera o original: o arquivo volta idêntico ao que `make verify` espera.
         PROJECT_FILE.write_text(gen_project.render(), encoding="utf-8")
+        # E reimporta. Deixar `.godot` apagado quebraria o próximo `make preview`: sem o
+        # registro de classes globais, `Params` e companhia não resolvem e o jogo trava
+        # numa janela vazia.
         shutil.rmtree(GODOT_CACHE, ignore_errors=True)
+        run_godot(["--headless", "--import"])
 
     diagnostics = [
         line for line in (process.stdout + process.stderr).splitlines()

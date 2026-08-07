@@ -70,6 +70,19 @@ biblioteca de materiais não existe e o jogo cai para o magenta de depuração.
 GODOT=/opt/godot/godot4 make preview
 ```
 
+Os dois **precisam de um display**: medir sem renderizar não diz nada sobre draw calls
+nem frame time, então esses alvos não rodam em headless — e avisam isso em vez de
+devolver números falsos. Numa sessão gráfica funcionam direto; em CI, envolva com um
+display virtual:
+
+```
+xvfb-run -a -s '-screen 0 1920x1080x24' make bench
+```
+
+Sem GPU (llvmpipe) a medição fica ordens de grandeza mais lenta. Use `GODOT_TIMEOUT`
+(segundos, padrão 300) para dar mais tempo, ou baixe `BENCH_SAMPLE_FRAMES` em
+`tools/params.py`.
+
 ---
 
 ## Stack

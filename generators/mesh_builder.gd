@@ -37,12 +37,17 @@ func clear() -> void:
 	_triangles = 0
 
 
-## Triângulo com normal de face calculada. Ordem anti-horária vista de fora.
+## Triângulo com normal de face calculada. Passe os vértices em ordem **anti-horária**
+## vista de fora — é a convenção que faz `(b - a) × (c - a)` apontar para fora.
+##
+## O Godot, porém, considera frontal o triângulo de winding **horário**. Emitir na ordem
+## recebida deixaria toda a geometria virada para dentro: a malha existe, consome draw
+## call, e não aparece. Por isso a emissão troca `b` e `c` — a normal continua a mesma.
 func add_triangle(a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
 	var normal: Vector3 = (b - a).cross(c - a).normalized()
 	_push(a, normal, color)
-	_push(b, normal, color)
 	_push(c, normal, color)
+	_push(b, normal, color)
 	_triangles += 1
 
 

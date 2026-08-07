@@ -14,11 +14,22 @@ import sys
 from pathlib import Path
 
 from . import params as P
-from .util import GodotMissing, GodotTimeout, ROOT, fail, run_godot
+from .util import (
+    MAX_DIAGNOSTIC_LINES,
+    GodotMissing,
+    GodotTimeout,
+    ROOT,
+    ensure_imported,
+    fail,
+    run_godot,
+)
 
 RESULT_PREFIX = "MEDIEV_RESULT "
 OUTPUT_DIR = ROOT / "assets/generated/preview"
 DEFAULT_BUDGET_KEY = "draw_calls_wilderness"
+
+
+NO_DISPLAY_MARKER = "Unable to create DisplayServer"
 
 
 def _extract_result(stdout: str) -> dict | None:
@@ -26,6 +37,27 @@ def _extract_result(stdout: str) -> dict | None:
         if line.startswith(RESULT_PREFIX):
             return json.loads(line[len(RESULT_PREFIX):])
     return None
+
+
+def explain_missing_result(process) -> str:
+    """Traduz um fim de execução sem métricas na causa provável."""
+    output = process.stdout + process.stderr
+    if NO_DISPLAY_MARKER in output:
+        return (
+            "O Godot não conseguiu abrir uma janela, então não há o que medir.\n"
+            "Medir sem renderizar não diz nada sobre draw calls nem frame time, por isso\n"
+            "este alvo não roda em headless. Numa sessão gráfica ele funciona direto; em\n"
+            "CI, envolva com um display virtual:\n"
+            "  xvfb-run -a -s '-screen 0 1920x1080x24' make bench"
+        )
+    diagnostics = [
+        line for line in output.splitlines()
+        if line.startswith("SCRIPT ERROR") or line.startswith("ERROR")
+    ]
+    if diagnostics:
+        joined = "\n    ".join(dict.fromkeys(diagnostics[:MAX_DIAGNOSTIC_LINES]))
+        return f"O projeto não reportou métricas. O Godot reclamou:\n    {joined}"
+    return "O projeto não reportou métricas. SessionProbe chegou a rodar?"
 
 
 def _row(label: str, value: str, ceiling: str = "", ok: bool | None = None) -> str:
@@ -89,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     summary_path = OUTPUT_DIR / "preview.json"
 
     try:
+        ensure_imported()
         process = run_godot([
             "--",
             "--bench",
@@ -107,9 +140,7 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = _extract_result(process.stdout)
     if summary is None:
-        print(process.stdout)
-        print(process.stderr, file=sys.stderr)
-        fail("O projeto não reportou métricas. SessionProbe rodou?")
+        fail(explain_missing_result(process))
         return 1
 
     within_budget = report(summary, budget_key)
