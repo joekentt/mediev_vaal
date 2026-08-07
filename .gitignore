@@ -4,6 +4,24 @@
 # tem gerador, ele está errado.
 /assets/generated/
 
+# Imagens de `make preview`. Derivadas — e, ao contrário do resto do derivado, elas não
+# são nem reprodutíveis byte a byte: o Cycles soma amostras em várias threads e o PNG sai
+# diferente a cada execução, mesmo com a mesma semente (medido, em todas as configurações
+# testadas, inclusive single-thread). Versioná-las encheria todo commit de ruído binário.
+# `docs/bench_history.csv` **não** está aqui de propósito: é texto, cresce uma linha por
+# execução, e é justamente o diff dele que mostra regressão.
+/docs/assets/
+/docs/assets.html
+/docs/shots/
+/docs/bench.json
+
+# O Godot importa .csv como arquivo de tradução e cospe um .translation por coluna.
+# `docs/.gdignore` manda o importador pular a pasta inteira — `docs/` é documentação e
+# relatório, nada ali é recurso de jogo. Estes ficam ignorados de qualquer forma, para o
+# caso de alguém abrir o projeto antes de atualizar.
+/docs/*.translation
+/docs/*.import
+
 # Override temporário escrito por `make warnings` (removido ao fim; fica aqui para o
 # caso de o processo morrer no meio).
 /override.cfg

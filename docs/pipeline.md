@@ -196,6 +196,58 @@ cairia no canto errado e a fase 6 teria de compensar peça a peça. Por isso
 > peça errada. `test_assets.py` apaga `tools/__pycache__` antes do primeiro import e
 > proíbe os subprocessos de escrever bytecode.
 
+## Os olhos: `make preview` e `make bench`
+
+Um gerador não sabe se o que produziu parece certo. Duas coisas passaram por todas as
+conferências automáticas deste projeto e só foram pegas *olhando*: o chão invisível por
+winding invertido, e os quatro ângulos idênticos do catálogo. Daí esta camada.
+
+### `make preview` — está certo?
+
+```
+tools/preview_assets.py   34 PNG de 512x512, 4 ângulos + figura de escala   (Blender)
+tools/contact_sheet.py    docs/assets.html, grade por categoria             (Python puro)
+tools/godot_shot.gd       docs/shots/*.png dos pontos nomeados              (Godot)
+```
+
+Uma renderização por peça, não quatro: a câmera é ortográfica e fixa, e o que muda entre
+os quadrantes é a rotação da cópia. A figura de 1,75 m ao lado existe porque
+"2,4 × 1,4 × 2,4 m" não responde "isto dá na cintura ou passa da cabeça?".
+
+### `make bench` — cabe?
+
+`tools/bench.gd` percorre `Params.BENCH_ROUTE` — fixa, porque um passeio diferente a cada
+execução transformaria o histórico em ruído — e escreve duas coisas: `docs/bench.json`
+com a corrida de agora, e uma linha nova em `docs/bench_history.csv` com todas.
+
+O CSV é o artefato que importa e o único destes que é **versionado**. Regressão não
+aparece num número, aparece numa coluna.
+
+### Três armadilhas, todas medidas
+
+**`--headless` no Godot não é "sem janela", é "sem renderizador".** Com ela, captura de
+tela sai preta e draw call sai zero. Os dois alvos chamam o Godot *sem* `--headless` e
+recusam rodar se não houver renderizador — gravar zeros no histórico seria pior que não
+medir, porque a coluna pareceria saudável.
+
+**O glTF guarda rotação como quaternion.** O importador deixa os objetos em
+`rotation_mode = 'QUATERNION'`, e nesse modo escrever em `rotation_euler` é aceito e
+ignorado. O objeto reportava a rotação certa quando perguntado e renderizava sem rotação
+nenhuma; os quatro ângulos saíam idênticos e a suspeita caiu na câmera. `preview_assets`
+força `rotation_mode = "XYZ"` antes de girar.
+
+**O Cycles não é determinístico byte a byte.** Testado com semente fixa, sem denoise, sem
+amostragem adaptativa, e até com uma thread só: o PNG sai diferente a cada execução. Por
+isso os renders estão no `.gitignore` — versioná-los encheria todo commit de ruído
+binário. É a razão de `docs/bench_history.csv` ser texto e não imagem.
+
+### O que Godot não mede
+
+Não existe monitor de "tempo gasto em GDScript". `Performance.TIME_PROCESS` é o passo
+idle inteiro da engine, e só o profiler do editor separa os dois — o que não roda por
+linha de comando. O CSV traz a coluna como `process_ms`, com o nome do que ela de fato
+mede, em vez de um `script_ms` que mentiria para quem lê o histórico atrás de regressão.
+
 ## Determinismo
 
 `Params.WORLD_SEED` controla toda a aleatoriedade da geração. Mesmo seed, mesmo mundo,

@@ -67,25 +67,26 @@ warnings:
 	@echo "== warnings =="
 	@GODOT=$(GODOT) $(PY) -m tools.check_warnings
 
-## Roda o jogo, mede e reporta. Rode isto ao terminar qualquer fase.
-## Uso: make preview [BUDGET=draw_calls_city]
+## Os olhos: renderiza o kit, monta docs/assets.html e captura a cena no Godot.
+## Precisa do Blender e, para as capturas, de display.
 preview:
 	@echo "== preview =="
-	@GODOT=$(GODOT) $(PY) -m tools.preview $(BUDGET)
+	@GODOT=$(GODOT) BLENDER=$(BLENDER) $(PY) -m tools.preview
 
-## Mede contra o orçamento e falha se estourar. Alvo de CI.
-## Uso: make bench [BUDGET=draw_calls_city]
+## Percorre a rota fixa, mede, e acrescenta uma linha a docs/bench_history.csv.
+## Precisa do Godot com display.
 bench:
 	@echo "== bench =="
-	@GODOT=$(GODOT) $(PY) -m tools.bench $(BUDGET)
+	@GODOT=$(GODOT) $(PY) -m tools.bench
 
 ## Apaga tudo que é derivado. `make all` traz de volta idêntico.
 clean:
 	@echo "== clean =="
 	@rm -rf assets/generated
 	@rm -rf .godot
+	@rm -rf docs/assets docs/shots docs/assets.html docs/bench.json
 	@find tools -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
-	@echo "  assets/generated, .godot e bytecode removidos"
+	@echo "  derivado removido (docs/bench_history.csv é versionado e fica)"
 
 ## clean + all: a prova de que o projeto inteiro é reprodutível do zero.
 regen: clean all
@@ -102,7 +103,7 @@ help:
 	@echo "  make world    cenas e manifesto do mundo"
 	@echo "  make verify   cobra a regra inegociável"
 	@echo "  make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)"
-	@echo "  make preview  roda, mede e reporta (precisa do Godot)"
-	@echo "  make bench    mede e falha se estourar o orçamento (precisa do Godot)"
+	@echo "  make preview  renders do kit + catálogo + capturas da cena"
+	@echo "  make bench    mede a rota fixa e acumula docs/bench_history.csv"
 	@echo "  make clean    apaga o derivado"
 	@echo "  make regen    clean + all"

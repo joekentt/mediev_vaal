@@ -24,9 +24,6 @@ func _ready() -> void:
 	})
 	print("Estágio gerado em %.2f ms." % elapsed_ms)
 
-	if SessionProbe.is_requested():
-		add_child(SessionProbe.new())
-
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"pause"):

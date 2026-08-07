@@ -340,8 +340,41 @@ def find_blender() -> str | None:
     return None
 
 
-def run_via_subprocess(binary: str, selected: list[str]) -> int:
-    command = [binary, "--background", "--python", str(Path(__file__).resolve())]
+def dispatch(script: Path, in_blender, selected: list[str]) -> int:
+    """Roda `in_blender` dentro do Blender, seja qual for o caminho disponível.
+
+    Três cenários, e o chamador não precisa saber em qual está:
+    já estamos dentro do Blender (executa direto), existe um binário (reexecuta o script
+    com `--background`), ou existe só o módulo `bpy` (que é o mesmo Blender, e aí já
+    estamos "dentro"). Compartilhado por `gen_assets` e `preview_assets` para que os dois
+    tenham exatamente o mesmo comportamento e a mesma mensagem de erro.
+    """
+    if _is_inside_blender():
+        return in_blender(selected)
+    try:
+        binary = find_blender()
+    except BlenderMissing as error:
+        print(f"ERRO: {error}", file=sys.stderr)
+        return 1
+    if binary is not None:
+        return run_via_subprocess(binary, selected, script)
+    print(BLENDER_HELP, file=sys.stderr)
+    return 1
+
+
+BLENDER_HELP = (
+    "ERRO: Blender não encontrado — esta etapa precisa dele.\n"
+    "  Escolha um caminho:\n"
+    "    - deixe `blender` no PATH;\n"
+    "    - aponte a variável BLENDER para o executável (BLENDER=/opt/blender/blender make assets);\n"
+    "    - ou instale o módulo equivalente com `pip install bpy` no Python que roda o make.\n"
+    "  As três produzem exatamente os mesmos arquivos."
+)
+
+
+def run_via_subprocess(binary: str, selected: list[str], script: Path | None = None) -> int:
+    script = Path(__file__).resolve() if script is None else script.resolve()
+    command = [binary, "--background", "--python", str(script)]
     if selected:
         command += [ARG_SEPARATOR, *selected]
     print(f"  $ {' '.join(command)}")
@@ -358,38 +391,22 @@ def run_via_subprocess(binary: str, selected: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     selected = [arg for arg in argv if not arg.startswith("-")]
-
-    if _is_inside_blender():
-        return run_in_blender(selected)
-
-    try:
-        binary = find_blender()
-    except BlenderMissing as error:
-        print(f"ERRO: {error}", file=sys.stderr)
-        return 1
-    if binary is not None:
-        return run_via_subprocess(binary, selected)
-
-    print(
-        "ERRO: Blender não encontrado — a fábrica de peças precisa dele.\n"
-        "  Escolha um caminho:\n"
-        "    - deixe `blender` no PATH;\n"
-        "    - aponte a variável BLENDER para o executável (BLENDER=/opt/blender/blender make assets);\n"
-        "    - ou instale o módulo equivalente com `pip install bpy` no Python que roda o make.\n"
-        "  As três produzem exatamente os mesmos .glb.",
-        file=sys.stderr,
-    )
-    return 1
+    return dispatch(Path(__file__), run_in_blender, selected)
 
 
-def _blender_argv() -> list[str]:
-    """Argumentos depois de `--`, que é como o Blender os repassa ao script."""
-    if ARG_SEPARATOR not in sys.argv:
-        return []
-    return sys.argv[sys.argv.index(ARG_SEPARATOR) + 1:]
+def script_args() -> list[str]:
+    """Argumentos da etapa, venha ela do Blender ou do Python.
+
+    `blender --background --python x.py -- a b` põe os argumentos depois de `--`;
+    `python -m tools.x a b` põe em `sys.argv[1:]`. Ler só o primeiro caso fazia o filtro
+    de peças ser silenciosamente ignorado quando se roda pelo módulo `bpy`.
+    """
+    if ARG_SEPARATOR in sys.argv:
+        return sys.argv[sys.argv.index(ARG_SEPARATOR) + 1:]
+    return [arg for arg in sys.argv[1:] if not arg.startswith("-")]
 
 
 if __name__ == "__main__":
     if _is_inside_blender():
-        raise SystemExit(run_in_blender(_blender_argv()))
+        raise SystemExit(run_in_blender(script_args()))
     raise SystemExit(main())

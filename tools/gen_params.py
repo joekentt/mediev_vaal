@@ -54,6 +54,24 @@ def _layer_consts() -> str:
     return "\n".join(lines)
 
 
+def _shot_points() -> str:
+    lines = []
+    for name, position, target in P.SHOT_POINTS:
+        lines.append(
+            f'\t[&"{name}", {_vec3(position)}, {_vec3(target)}],'
+        )
+    return "\n".join(lines)
+
+
+def _bench_route() -> str:
+    return "\n".join(f"\t{_vec3(point)}," for point in P.BENCH_ROUTE)
+
+
+def _vec3(values) -> str:
+    x, y, z = values
+    return f"Vector3({P.num(x)}, {P.num(y)}, {P.num(z)})"
+
+
 def _period_enum() -> str:
     return ", ".join(P.period_names())
 
@@ -193,6 +211,28 @@ const WORLD_SEED: int = {P.WORLD_SEED}
 const BENCH_WARMUP_FRAMES: int = {P.BENCH_WARMUP_FRAMES}
 const BENCH_SAMPLE_FRAMES: int = {P.BENCH_SAMPLE_FRAMES}
 const SCREENSHOT_WAIT_FRAMES: int = {P.SCREENSHOT_WAIT_FRAMES}
+
+# --- Olhos: capturas e benchmark ---------------------------------------------
+
+## Onde `tools/godot_shot.gd` grava as capturas. Derivado: está no .gitignore.
+const SHOTS_DIR: String = "res://{P.SHOTS_DIR}"
+## Última medição de `tools/bench.gd`.
+const BENCH_JSON: String = "res://{P.BENCH_JSON}"
+## Histórico acumulado, uma linha por execução. **Versionado** — é o que mostra regressão.
+const BENCH_HISTORY: String = "res://{P.BENCH_HISTORY}"
+
+## Pontos de câmera nomeados: [nome, posição, alvo].
+const SHOT_POINTS: Array = [
+{_shot_points()}
+]
+
+## Rota fixa do benchmark. Fixa de propósito: um passeio diferente a cada execução
+## tornaria o histórico ruído em vez de sinal.
+const BENCH_ROUTE: Array[Vector3] = [
+{_bench_route()}
+]
+const BENCH_ROUTE_SECONDS: float = {P.num(P.BENCH_ROUTE_SECONDS)}
+const BENCH_LOW_PERCENTILE: float = {P.num(P.BENCH_LOW_PERCENTILE)}
 
 # --- Acesso ------------------------------------------------------------------
 

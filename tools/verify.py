@@ -31,7 +31,9 @@ from .util import ROOT
 ALLOWED_LITERALS = {"0", "1", "2", "-1", "0.0", "1.0", "2.0", "0.5", "-1.0"}
 
 # Diretórios varridos pelos linters de GDScript.
-GDSCRIPT_DIRS = ("scripts", "generators")
+# `tools/` entra na varredura: `godot_shot.gd` e `bench.gd` são GDScript do projeto e
+# valem as mesmas regras de tipagem e de número mágico que o resto.
+GDSCRIPT_DIRS = ("scripts", "generators", "tools")
 
 # `params.gd` é o espelho gerado da fonte de verdade: é o único .gd cheio de números.
 MAGIC_NUMBER_EXEMPT = {Path("scripts/core/params.gd")}

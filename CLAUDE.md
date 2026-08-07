@@ -27,6 +27,9 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `scenes/world/main.tscn` | `tools/gen_world.py` | `tools/params.py` |
 | Céu, sol, chão, colisão, câmera | `generators/world_generator.gd` | `Params` |
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
+| `docs/assets.html` + renders | `tools/preview_assets.py` + `tools/contact_sheet.py` | manifesto do kit |
+| `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
+| `docs/bench.json` + histórico | `tools/bench.gd` | `Params.BENCH_ROUTE` |
 
 Consequências práticas:
 
@@ -62,8 +65,8 @@ make audio    barramentos + tom de calibração
 make world    cenas e manifesto do mundo
 make verify   cobra a regra inegociável
 make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)
-make preview  roda o jogo, mede e reporta          (precisa do Godot)
-make bench    mede e falha se estourar o orçamento (precisa do Godot)
+make preview  renders do kit + docs/assets.html + capturas da cena
+make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
 ```
@@ -86,10 +89,11 @@ make assets PARTS="wall barrel"     # só as peças citadas, para iterar rápido
 GODOT=/opt/godot/godot4 make preview
 ```
 
-Os dois **precisam de um display**: medir sem renderizar não diz nada sobre draw calls
-nem frame time, então esses alvos não rodam em headless — e avisam isso em vez de
-devolver números falsos. Numa sessão gráfica funcionam direto; em CI, envolva com um
-display virtual:
+Os dois **precisam de um display** — e note que `--headless` no Godot não significa "sem
+janela", significa *sem renderizador*: com ela, captura de tela vem preta e draw call vem
+zero. Por isso `preview` e `bench` chamam o Godot **sem** `--headless` e recusam rodar se
+não houver renderizador, em vez de gravar números falsos no histórico. Numa sessão gráfica
+funcionam direto; em CI, envolva com um display virtual:
 
 ```
 xvfb-run -a -s '-screen 0 1920x1080x24' make bench
@@ -136,8 +140,12 @@ Paleta em `tools/params.py`, acessível no jogo por `Params.color(&"stone")`.
   kit_*.py          as 34 peças paramétricas (arquitetura, props, natureza)
   test_assets.py    prova determinismo, paleta e orçamento do kit
   verify.py         cobra a regra inegociável
-  preview.py        roda, mede, reporta
-  bench.py          mede e reprova quem estourar o orçamento
+  preview_assets.py renderiza cada peça em 4 ângulos, com figura de escala (Blender)
+  contact_sheet.py  monta docs/assets.html a partir dos renders e do manifesto
+  godot_shot.gd     capturas da cena de pontos nomeados (Godot)
+  bench.gd          percorre a rota fixa e mede (Godot)
+  preview.py        orquestra os renders, o catálogo e as capturas
+  bench.py          roda bench.gd e traduz falha de ambiente
 /generators         geração em GDScript (runtime)
   mesh_builder.gd   ArrayMesh flat + vertex color; valida orçamento de tris
   material_library.gd  materiais compartilhados, um por nome
@@ -152,6 +160,8 @@ Paleta em `tools/params.py`, acessível no jogo por `Params.color(&"stone")`.
 /assets/generated   DERIVADO — no .gitignore, volta com `make all`
   kit/              as 34 peças em .glb + manifest.json
 /docs               documentação do pipeline
+  assets.html       catálogo visual do kit (derivado)
+  bench_history.csv VERSIONADO: uma linha por execução de `make bench`
 ```
 
 ---
@@ -305,57 +315,62 @@ Para mudar um atalho: `tools/params.py` → `INPUT_MAP` → `make project`.
 
 ---
 
-## Roteiro — fases 1 a 12
+## Roteiro — fases 1 a 13
 
 Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 
-1. **Fundação do pipeline** ✅ *(esta etapa)*
+1. **Fundação do pipeline** ✅
    Estrutura de pastas, `params.py`/`params.gd`, `project.godot` gerado, autoloads,
    input map, Makefile, verificador da regra inegociável, estágio vazio com chão e céu.
 
-2. **Fábrica de assets** ✅ *(esta etapa)*
+2. **Fábrica de assets** ✅
    `tools/meshlib.py` e as 34 peças paramétricas de `kit_architecture`, `kit_props` e
    `kit_nature`, geradas em Blender headless, exportadas em `.glb` com manifesto, dentro
    dos tetos de `KIT_TRI_BUDGET` e com determinismo provado byte a byte.
 
-3. **Terreno e mundo**
+3. **Olhos: catálogo e medição** ✅ *(esta etapa)*
+   `make preview` renderiza o kit em `docs/assets.html` e captura a cena; `make bench`
+   percorre uma rota fixa e acumula `docs/bench_history.csv`. Nenhuma fase fecha sem os
+   dois.
+
+4. **Terreno e mundo**
    Altura procedural com seed, chunks de 32 m, streaming por distância, biomas por
    paleta, água. Vegetação em `MultiMesh`.
 
-4. **Ciclo dia/noite**
+5. **Ciclo dia/noite**
    `TimeSystem` passa a mover o sol, a cor do céu e a névoa. Iluminação por período,
    sem custo por frame além da interpolação.
 
-5. **Jogador e câmera**
+6. **Jogador e câmera**
    `CharacterBody3D` gerado, caminhar/correr/pular, câmera de terceira pessoa com
    colisão contra o cenário, captura de mouse.
 
-6. **Kit modular de arquitetura**
+7. **Kit modular de arquitetura**
    Paredes, portas, janelas, telhados e escadas gerados no grid de 2 m. Prédios montados
    por composição, dentro do teto de tris por categoria.
 
-7. **Cidade**
+8. **Cidade**
    Layout urbano procedural: grafo de ruas, quadras, praça, muralha. Agrupamento por
    quadra e occluders para segurar os 200 draw calls. `NavigationRegion3D` gerada.
 
-8. **Interiores e props**
+9. **Interiores e props**
    Interiores gerados por planta, mobiliário procedural, iluminação interna dentro do
    teto de luzes com sombra.
 
-9. **NPCs e rotinas**
+10. **NPCs e rotinas**
    Corpos gerados por composição paramétrica, agenda diária guiada por
    `EventBus.hour_changed`, teto de 40 ativos com simulação abstrata acima disso,
    navegação pela cidade.
 
-10. **Raças, facções e diálogo**
+11. **Raças, facções e diálogo**
     `Resource`s de raça e povo gerados em `resources/`, árvores de diálogo geradas, UI de
     conversa, reputação por facção.
 
-11. **Áudio procedural**
+12. **Áudio procedural**
     Síntese de música e efeitos em `tools/gen_audio.py` — o mesmo caminho do tom de
     calibração da fase 1. Trilha adaptativa por período do dia, ambiência por bioma.
 
-12. **Itens, combate e fechamento**
+13. **Itens, combate e fechamento**
     Itens e equipamento gerados, combate corpo a corpo e à distância, IA hostil,
     salvamento/carregamento, passe de perfilamento contra todo o orçamento, build de
     release.
@@ -364,20 +379,32 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 
 ## Ao terminar qualquer fase
 
-**Rode `make preview` e reporte os números.** Não é opcional e não é cerimônia: é como
-sabemos se a fase cabe no orçamento antes de empilhar a próxima em cima dela.
+**Nenhuma fase está concluída sem `make preview` e `make bench` rodados, com os números
+colados no commit.** Não é cerimônia. Um gerador não tem como saber se o que ele produziu
+parece certo, e uma contagem de triângulos dentro do orçamento não impede uma árvore de
+sair torta ou um chão de sumir por winding invertido — as duas coisas já aconteceram
+neste projeto e foram encontradas *olhando*, não lendo log.
 
-O relatório de fim de fase traz:
+`make preview` responde "está certo?":
 
-- draw calls (pico) contra o teto da cena;
-- triângulos visíveis (pico) contra o teto;
-- materiais únicos carregados;
+- `docs/assets.html` com as 34 peças em quatro ângulos e uma figura de 1,75 m ao lado,
+  para o tamanho significar alguma coisa;
+- `docs/shots/*.png` com a cena de verdade, dos pontos de câmera nomeados.
+
+`make bench` responde "cabe?":
+
+- FPS médio **e 1% low** — a média esconde engasgo, o 1% low é o que o jogador sente;
+- draw calls e triângulos (pico) contra os tetos;
 - frame time médio e pior frame;
-- FPS médio;
-- e, se algo estourou, o quê e por quanto.
+- tempo de física e do passo idle;
+- uma linha nova em `docs/bench_history.csv`, que é como a regressão aparece: um número
+  solto não diz nada, uma coluna de números diz tudo.
 
-Se `make preview` acusa estouro, a fase **não terminou**. Otimize ou renegocie o teto em
+Se `make bench` acusa estouro, a fase **não terminou**. Otimize ou renegocie o teto em
 `tools/params.py` — explicitamente, com o diff mostrando a mudança.
+
+**O que vai no commit.** Cole a saída de `make bench` e diga o que mudou desde a linha
+anterior do histórico. Se algo piorou, diga por quê antes de alguém perguntar.
 
 Antes de commitar, dois alvos também precisam passar:
 

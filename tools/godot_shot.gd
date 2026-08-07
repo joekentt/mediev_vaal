@@ -1,0 +1,88 @@
+## Capturas do jogo rodando, de pontos de câmera nomeados.
+##
+##     godot --script res://tools/godot_shot.gd
+##
+## Abre a cena principal, deixa o mundo se gerar, e salva um PNG por ponto de
+## `Params.SHOT_POINTS` em `docs/shots/`. É o par do catálogo do kit: um mostra as peças
+## isoladas, este mostra o que a engine de fato desenha.
+##
+## **Sem `--headless`, e não é descuido.** No Godot essa flag não significa "sem janela":
+## significa *sem renderizador*, e o backend nulo devolve textura vazia. Captura de tela
+## com `--headless` é uma contradição. O que se quer em CI é um display virtual:
+##
+##     xvfb-run -a -s '-screen 0 1920x1080x24' godot --script res://tools/godot_shot.gd
+##
+## Se ainda assim não houver renderizador, o script sai com erro em vez de gravar quatro
+## PNGs pretos que alguém levaria meia hora para desconfiar.
+extends SceneTree
+
+const SCENE_PATH: String = "res://scenes/world/main.tscn"
+const SHOT_EXTENSION: String = ".png"
+const HEADLESS_DISPLAY: String = "headless"
+const RESULT_PREFIX: String = "MEDIEV_SHOTS "
+
+var _root: Node3D = null
+var _camera: Camera3D = null
+
+
+func _initialize() -> void:
+	if DisplayServer.get_name() == HEADLESS_DISPLAY:
+		push_error(
+			"Sem display: o renderizador nulo não produz imagem. "
+			+ "Rode com xvfb-run ou numa sessão gráfica."
+		)
+		quit(1)
+		return
+	_capture.call_deferred()
+
+
+func _capture() -> void:
+	var packed: PackedScene = ResourceLoader.load(SCENE_PATH) as PackedScene
+	if packed == null:
+		push_error("Não consegui carregar %s" % SCENE_PATH)
+		quit(1)
+		return
+
+	_root = packed.instantiate() as Node3D
+	root.add_child(_root)
+
+	# O mundo é construído no `_ready` da cena; sem esperar, a primeira captura sairia
+	# de um mundo pela metade.
+	for _frame: int in Params.BENCH_WARMUP_FRAMES:
+		await process_frame
+
+	_camera = Camera3D.new()
+	_camera.fov = Params.STAGE_CAMERA_FOV
+	_camera.far = Params.STAGE_CAMERA_FAR
+	root.add_child(_camera)
+	_camera.make_current()
+
+	var written: Array[String] = []
+	for shot: Array in Params.SHOT_POINTS:
+		var shot_name: String = String(shot[0])
+		_camera.global_position = shot[1]
+		_camera.look_at(shot[2], Vector3.UP)
+
+		for _frame: int in Params.SCREENSHOT_WAIT_FRAMES:
+			await RenderingServer.frame_post_draw
+
+		var path: String = "%s/%s%s" % [Params.SHOTS_DIR, shot_name, SHOT_EXTENSION]
+		if _save(path):
+			written.append(shot_name)
+			print("  %s -> %s" % [shot_name, path])
+
+	print(RESULT_PREFIX + JSON.stringify({"shots": written, "dir": Params.SHOTS_DIR}))
+	quit(0)
+
+
+func _save(path: String) -> bool:
+	var image: Image = root.get_texture().get_image()
+	if image == null:
+		push_error("Viewport não devolveu imagem para %s" % path)
+		return false
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var error: Error = image.save_png(path)
+	if error != OK:
+		push_error("Falha ao salvar %s (erro %d)" % [path, error])
+		return false
+	return true

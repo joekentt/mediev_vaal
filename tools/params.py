@@ -335,6 +335,63 @@ MOUSE_SENSITIVITY_MIN = 0.02
 MOUSE_SENSITIVITY_MAX = 1.0
 
 # ---------------------------------------------------------------------------
+# Olhos: renderização de catálogo e capturas
+# ---------------------------------------------------------------------------
+# Esta fase existe porque quem escreve o gerador não vê o que ele gera.
+
+DOCS_DIR = "docs"
+PREVIEW_IMAGE_DIR = "docs/assets"        # PNG por peça (derivado, no .gitignore)
+PREVIEW_SHEET = "docs/assets.html"       # contact sheet (derivado)
+SHOTS_DIR = "docs/shots"                 # capturas do Godot (derivado)
+BENCH_JSON = "docs/bench.json"           # última medição (derivado)
+BENCH_HISTORY = "docs/bench_history.csv" # VERSIONADO: uma linha por execução
+
+PREVIEW_SIZE = 512                       # lado do PNG de cada peça
+PREVIEW_SAMPLES = 24                     # amostras do Cycles; cor flat não pede mais
+PREVIEW_MARGIN = 1.25                    # folga em volta da peça, como fator
+PREVIEW_FIGURE_HEIGHT = 1.75             # altura da figura de escala, em metros
+PREVIEW_FIGURE_GAP = 0.55                # espaço entre a figura e a grade de ângulos
+PREVIEW_BACKGROUND = "#5A5A5A"           # cinza médio neutro
+
+# Os quatro ângulos. Cada um é uma rotação aplicada à *cópia* da peça; a câmera é uma
+# só, ortográfica, olhando ao longo de -Y. Rotacionar a peça em vez de mover a câmera
+# permite uma renderização por peça em vez de quatro.
+PREVIEW_ANGLES: tuple[tuple[str, tuple[float, float, float]], ...] = (
+    ("frente",  (0.0, 0.0, 0.0)),
+    ("3/4",     (0.0, 0.0, -45.0)),
+    ("lateral", (0.0, 0.0, -90.0)),
+    ("topo",    (-90.0, 0.0, 0.0)),
+)
+
+# Luz neutra de três pontos: principal, preenchimento e contra. Ângulos em graus
+# (elevação, azimute) e energia relativa.
+PREVIEW_LIGHTS: tuple[tuple[str, float, float, float], ...] = (
+    ("key",  40.0, -35.0, 4.0),
+    ("fill", 15.0,  55.0, 1.6),
+    ("rim",  55.0, 160.0, 2.4),
+)
+
+# Pontos de câmera nomeados para `tools/godot_shot.gd`: (nome, posição, alvo).
+SHOT_POINTS: tuple[tuple[str, tuple[float, float, float], tuple[float, float, float]], ...] = (
+    ("wide",    (0.0, 12.0, 26.0),  (0.0, 0.0, 0.0)),
+    ("eye",     (0.0, 1.7, 9.0),    (0.0, 1.6, 0.0)),
+    ("top",     (0.0, 40.0, 0.1),   (0.0, 0.0, 0.0)),
+    ("horizon", (18.0, 2.2, 18.0),  (0.0, 1.0, 0.0)),
+)
+
+# Rota fixa do benchmark: a câmera percorre estes pontos em ordem, em ciclo. Fixa de
+# propósito — medir um passeio diferente a cada execução tornaria o histórico ruído.
+BENCH_ROUTE: tuple[tuple[float, float, float], ...] = (
+    (0.0, 1.7, 20.0),
+    (20.0, 1.7, 20.0),
+    (20.0, 8.0, -20.0),
+    (-20.0, 3.0, -20.0),
+    (-20.0, 1.7, 20.0),
+)
+BENCH_ROUTE_SECONDS = 8.0                # duração de uma volta completa
+BENCH_LOW_PERCENTILE = 1.0               # "1% low": pior 1% dos frames
+
+# ---------------------------------------------------------------------------
 # Geração
 # ---------------------------------------------------------------------------
 

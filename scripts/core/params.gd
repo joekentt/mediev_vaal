@@ -203,6 +203,35 @@ const BENCH_WARMUP_FRAMES: int = 30
 const BENCH_SAMPLE_FRAMES: int = 240
 const SCREENSHOT_WAIT_FRAMES: int = 10
 
+# --- Olhos: capturas e benchmark ---------------------------------------------
+
+## Onde `tools/godot_shot.gd` grava as capturas. Derivado: está no .gitignore.
+const SHOTS_DIR: String = "res://docs/shots"
+## Última medição de `tools/bench.gd`.
+const BENCH_JSON: String = "res://docs/bench.json"
+## Histórico acumulado, uma linha por execução. **Versionado** — é o que mostra regressão.
+const BENCH_HISTORY: String = "res://docs/bench_history.csv"
+
+## Pontos de câmera nomeados: [nome, posição, alvo].
+const SHOT_POINTS: Array = [
+	[&"wide", Vector3(0, 12, 26), Vector3(0, 0, 0)],
+	[&"eye", Vector3(0, 1.7, 9), Vector3(0, 1.6, 0)],
+	[&"top", Vector3(0, 40, 0.1), Vector3(0, 0, 0)],
+	[&"horizon", Vector3(18, 2.2, 18), Vector3(0, 1, 0)],
+]
+
+## Rota fixa do benchmark. Fixa de propósito: um passeio diferente a cada execução
+## tornaria o histórico ruído em vez de sinal.
+const BENCH_ROUTE: Array[Vector3] = [
+	Vector3(0, 1.7, 20),
+	Vector3(20, 1.7, 20),
+	Vector3(20, 8, -20),
+	Vector3(-20, 3, -20),
+	Vector3(-20, 1.7, 20),
+]
+const BENCH_ROUTE_SECONDS: float = 8
+const BENCH_LOW_PERCENTILE: float = 1
+
 # --- Acesso ------------------------------------------------------------------
 
 

@@ -25,37 +25,14 @@ static func sample(viewport: Viewport) -> Dictionary:
 			rid, visible, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME
 		),
 		"fps": Performance.get_monitor(Performance.TIME_FPS),
+		# `TIME_PROCESS` é o passo *idle* inteiro da engine, não o tempo gasto em GDScript.
+		# O Godot não expõe "tempo de script" como monitor — isso só sai no profiler do
+		# editor, que não existe em execução headless. Chamar isto de `script_ms` daria uma
+		# coluna com nome errado no histórico, que é pior que uma coluna a menos.
 		"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * MS_PER_SEC,
 		"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * MS_PER_SEC,
 		"memory_mb": Performance.get_monitor(Performance.MEMORY_STATIC) / BYTES_PER_MB,
 		"materials_loaded": MaterialLibrary.loaded_count(),
-	}
-
-
-## Reduz uma série de amostras a picos e médias. Picos, não médias, é o que reprova
-## uma cena: o pior frame é o que o jogador sente.
-static func summarize(samples: Array[Dictionary]) -> Dictionary:
-	if samples.is_empty():
-		return {}
-
-	var frame_ms: Array[float] = []
-	for entry: Dictionary in samples:
-		var fps: float = entry["fps"]
-		if fps > 0.0:
-			frame_ms.append(MS_PER_SEC / fps)
-
-	var last: Dictionary = samples[samples.size() - 1]
-	var average_ms: float = _average(frame_ms)
-	return {
-		"samples": samples.size(),
-		"draw_calls": _peak(samples, "draw_calls"),
-		"objects": _peak(samples, "objects"),
-		"triangles": _peak(samples, "triangles"),
-		"materials_loaded": int(last["materials_loaded"]),
-		"frame_ms_avg": average_ms,
-		"frame_ms_max": _maximum(frame_ms),
-		"fps_avg": MS_PER_SEC / average_ms if average_ms > 0.0 else 0.0,
-		"memory_mb": float(last["memory_mb"]),
 	}
 
 
@@ -87,24 +64,19 @@ static func check_budget(summary: Dictionary, draw_call_key: StringName) -> Arra
 	return violations
 
 
-static func _peak(samples: Array[Dictionary], key: String) -> int:
+## Maior valor de uma chave na série. Pico, não média: é o pico que reprova uma cena.
+static func peak(samples: Array[Dictionary], key: String) -> int:
 	var highest: int = 0
 	for entry: Dictionary in samples:
 		highest = maxi(highest, int(entry[key]))
 	return highest
 
 
-static func _average(values: Array[float]) -> float:
-	if values.is_empty():
+## Média de uma chave na série.
+static func average(samples: Array[Dictionary], key: String) -> float:
+	if samples.is_empty():
 		return 0.0
 	var total: float = 0.0
-	for value: float in values:
-		total += value
-	return total / float(values.size())
-
-
-static func _maximum(values: Array[float]) -> float:
-	var highest: float = 0.0
-	for value: float in values:
-		highest = maxf(highest, value)
-	return highest
+	for entry: Dictionary in samples:
+		total += float(entry[key])
+	return total / float(samples.size())
