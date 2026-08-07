@@ -21,7 +21,8 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | --- | --- | --- |
 | `project.godot` | `tools/gen_project.py` | `tools/params.py` |
 | `scripts/core/params.gd` | `tools/gen_params.py` | `tools/params.py` |
-| `assets/generated/materials/*.tres` | `tools/gen_assets.py` | `tools/params.py` |
+| `assets/generated/materials/*.tres` | `tools/gen_materials.py` | `tools/params.py` |
+| `assets/generated/kit/*.glb` + manifesto | `tools/gen_assets.py` (Blender) | `tools/params.py` |
 | `assets/generated/audio/*` | `tools/gen_audio.py` | `tools/params.py` |
 | `scenes/world/main.tscn` | `tools/gen_world.py` | `tools/params.py` |
 | Céu, sol, chão, colisão, câmera | `generators/world_generator.gd` | `Params` |
@@ -33,8 +34,12 @@ Consequências práticas:
   `make verify` reprova o build na hora. Mude `tools/params.py` e rode `make project`.
 - **Não arraste nós para dentro de `main.tscn`.** Ela tem um `Node3D` e um script, e é
   assim que fica. Nó novo nasce em `generators/`.
-- **Não importe .glb, .obj, .fbx nem textura de imagem.** Geometria vem do `MeshBuilder`,
-  cor vem da paleta e do vertex color.
+- **Não importe .glb, .obj, .fbx nem textura de imagem que você não tenha gerado.**
+  A fronteira é a origem, não a extensão: `assets/generated/kit/*.glb` sai de
+  `tools/gen_assets.py` e volta idêntico com um comando, então é tão gerado quanto um
+  `.tres`. Um `.glb` baixado, comprado ou modelado à mão no Blender, não — esse é
+  exatamente o artefato que a regra existe para barrar. Textura de imagem continua
+  proibida sem exceção: cor é vertex color, ponto.
 - **Arquivo gerado tem cabeçalho de arquivo gerado.** Se você está editando um arquivo com
   `ARQUIVO GERADO — NÃO EDITE À MÃO` no topo, pare e vá para o gerador.
 - `assets/generated/` está no `.gitignore`. É derivado: sai do git e volta com `make all`.
@@ -50,7 +55,9 @@ que está na árvore. Deriva reprova o build.
 make all      regenera tudo e verifica            (não precisa do Godot)
 make params   scripts/core/params.gd
 make project  project.godot
-make assets   biblioteca de materiais
+make materials  biblioteca de materiais do Godot
+make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
+make test-assets prova determinismo, paleta e orçamento  (precisa do Blender)
 make audio    barramentos + tom de calibração
 make world    cenas e manifesto do mundo
 make verify   cobra a regra inegociável
@@ -63,6 +70,15 @@ make regen    clean + all — prova de reprodutibilidade
 
 Depois de clonar o repositório: **`make all` antes de abrir o Godot.** Sem isso a
 biblioteca de materiais não existe e o jogo cai para o magenta de depuração.
+
+`make all` inclui `make assets`, então **precisa do Blender** — pelo binário no `PATH`,
+pela variável `BLENDER`, ou pelo módulo `bpy` (`pip install bpy`) no Python que roda o
+`make`. Os três produzem exatamente os mesmos `.glb`; a fábrica confere isso.
+
+```
+BLENDER=/opt/blender/blender make assets
+make assets PARTS="wall barrel"     # só as peças citadas, para iterar rápido
+```
 
 `make preview` e `make bench` acham o Godot pelo `PATH` ou pela variável `GODOT`:
 
@@ -91,7 +107,8 @@ Sem GPU (llvmpipe) a medição fica ordens de grandeza mais lenta. Use `GODOT_TI
 | --- | --- |
 | Engine | Godot 4.x |
 | Linguagem do jogo | GDScript, sempre tipado |
-| Linguagem do pipeline | Python 3 (stdlib apenas — sem dependência externa) |
+| Linguagem do pipeline | Python 3 (stdlib apenas) |
+| Modelagem | Blender headless, via script — nunca pela interface |
 | Renderer | Forward+ |
 | Anti-aliasing | MSAA 3D 2x, debanding ligado |
 | Sombras | filtro *soft medium* (3), atlas direcional 4096, posicional 2048 |
@@ -114,7 +131,10 @@ Paleta em `tools/params.py`, acessível no jogo por `Params.color(&"stone")`.
 ```
 /tools              pipeline em Python: geradores, verificador, medição
   params.py         FONTE ÚNICA DE VERDADE — todo número do projeto
-  gen_*.py          geradores (params, project, assets, audio, world)
+  gen_*.py          geradores (params, project, materials, assets, audio, world)
+  meshlib.py        helpers de malha no Blender: primitivas, chanfro, ruído, cor
+  kit_*.py          as 34 peças paramétricas (arquitetura, props, natureza)
+  test_assets.py    prova determinismo, paleta e orçamento do kit
   verify.py         cobra a regra inegociável
   preview.py        roda, mede, reporta
   bench.py          mede e reprova quem estourar o orçamento
@@ -130,6 +150,7 @@ Paleta em `tools/params.py`, acessível no jogo por `Params.color(&"stone")`.
   ui/               telas e widgets
 /resources          dados de design gerados (raças, diálogos, itens), versionados
 /assets/generated   DERIVADO — no .gitignore, volta com `make all`
+  kit/              as 34 peças em .glb + manifest.json
 /docs               documentação do pipeline
 ```
 
@@ -292,10 +313,10 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    Estrutura de pastas, `params.py`/`params.gd`, `project.godot` gerado, autoloads,
    input map, Makefile, verificador da regra inegociável, estágio vazio com chão e céu.
 
-2. **Núcleo de geração de malha**
-   `MeshBuilder` completo: prismas, cilindros e cones low poly, chanfro, bevel de
-   silhueta, LOD por decimação. Biblioteca de formas base e teste de orçamento por
-   categoria.
+2. **Fábrica de assets** ✅ *(esta etapa)*
+   `tools/meshlib.py` e as 34 peças paramétricas de `kit_architecture`, `kit_props` e
+   `kit_nature`, geradas em Blender headless, exportadas em `.glb` com manifesto, dentro
+   dos tetos de `KIT_TRI_BUDGET` e com determinismo provado byte a byte.
 
 3. **Terreno e mundo**
    Altura procedural com seed, chunks de 32 m, streaming por distância, biomas por

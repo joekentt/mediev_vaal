@@ -118,6 +118,55 @@ STAGE_GROUND_CELLS = 20         # subdivisões do chão do estágio (por lado)
 STAGE_GROUND_TONE_JITTER = 0.04 # variação de tom por célula, via vertex color
 
 # ---------------------------------------------------------------------------
+# Fábrica de assets (Blender headless)
+# ---------------------------------------------------------------------------
+# Política de granularidade: aqui ficam as medidas *compartilhadas* — as que fazem as
+# peças encaixarem umas nas outras e as que a arte inteira herda. As proporções internas
+# de cada peça vivem na assinatura da própria função, documentadas e quase sempre
+# expressas como fração de GRID_SIZE. Empurrar as ~300 medidas internas de 34 peças para
+# cá tornaria este arquivo ilegível sem tornar nada mais fácil de mudar.
+
+KIT_DIR = "assets/generated/kit"
+KIT_SEED = 7717                 # semente-mãe; cada peça deriva a sua de nome + esta
+KIT_EXPORT_FORMAT = "GLB"
+
+# Espessuras e folgas do kit modular. Tudo múltiplo ou fração do grid de 2 m.
+WALL_THICKNESS = 0.25
+FLOOR_THICKNESS = 0.2
+BEAM_THICKNESS = 0.22
+PILLAR_RADIUS = 0.28
+PILLAR_SIDES = 8                # prisma octogonal: silhueta redonda a 8 faces
+ROOF_PITCH_DEG = 38.0           # inclinação do telhado
+ROOF_OVERHANG = 0.3             # beiral além da parede
+STAIR_STEPS = 6
+WINDOW_WIDTH = 0.9
+WINDOW_HEIGHT = 1.0
+WINDOW_SILL = 1.0               # altura do peitoril
+GATE_WIDTH = 3.0
+GATE_HEIGHT = 3.4
+GATE_ARCH_SEGMENTS = 5
+TOWER_SIDES = 8
+TOWER_HEIGHT = 9.0
+TOWER_RADIUS = 1.8
+BRIDGE_LENGTH = 8.0
+FENCE_RAILS = 2
+
+# Detalhe das peças de natureza. Menos segmentos = silhueta mais dura, que é o alvo.
+ROCK_SUBDIVISIONS = 2         # icosfera: 1 dá 20 tris, 2 dá 80 — ver meshlib.add_icosphere
+ROCK_NOISE = 0.22               # deslocamento relativo ao raio
+TREE_TRUNK_SIDES = 5
+TREE_CANOPY_BLOBS = 3           # icosferas achatadas que formam a copa
+TREE_CANOPY_NOISE = 0.18
+CONIFER_TIERS = 3
+CONIFER_SIDES = 6
+BUSH_BLOBS = 3
+GRASS_BLADES = 5
+
+# Chanfro de silhueta: quebra a aresta viva sem custar quase nada em triângulos.
+BEVEL_AMOUNT = 0.03
+BEVEL_SEGMENTS = 1
+
+# ---------------------------------------------------------------------------
 # Orçamentos de performance
 # ---------------------------------------------------------------------------
 # Alvo: 60 FPS a 1080p em GPU integrada moderna. Estes números são teto, não meta.
@@ -150,6 +199,15 @@ TRI_BUDGET: dict[str, int] = {
     "player":           1_200,
     "weapon":           150,
     "stage_ground":     1_000,
+}
+
+# Teto de triângulos por *peça* da fábrica do Blender, por categoria do manifesto.
+# `make assets` reprova a peça que estourar — não avisa, reprova.
+KIT_TRI_BUDGET: dict[str, int] = {
+    "architecture": 300,
+    "props":        300,
+    "nature":       300,
+    "tree":         600,   # árvore tem direito ao dobro: a copa custa
 }
 
 # ---------------------------------------------------------------------------
@@ -311,6 +369,34 @@ def num(value: float) -> str:
     if value == int(value):
         return str(int(value))
     return repr(round(value, 6))
+
+
+# Ordem estável das cores. A fábrica de assets guarda um índice por face (BMesh só
+# aceita camadas numéricas), e este é o dicionário que traduz índice de volta em nome.
+PALETTE_KEYS: tuple[str, ...] = tuple(PALETTE)
+
+
+def palette_index(key: str) -> int:
+    """Índice estável de uma cor da paleta. Falha alto: cor inventada é bug, não estilo."""
+    try:
+        return PALETTE_KEYS.index(key)
+    except ValueError:
+        raise KeyError(
+            f"Cor {key!r} não existe na paleta. Disponíveis: {', '.join(PALETTE_KEYS)}"
+        ) from None
+
+
+def srgb_to_linear(channel: float) -> float:
+    """sRGB -> linear. glTF define COLOR_0 em espaço linear; a paleta é escrita em sRGB."""
+    if channel <= 0.04045:
+        return channel / 12.92
+    return ((channel + 0.055) / 1.055) ** 2.4
+
+
+def linear_rgba(key: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
+    """Cor da paleta pronta para virar vertex color num .glb."""
+    r, g, b = hex_to_rgb(PALETTE[key])
+    return (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), alpha)
 
 
 def period_names() -> tuple[str, ...]:

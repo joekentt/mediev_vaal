@@ -11,16 +11,19 @@ Cobre quatro coisas, e reprova o build em qualquer uma:
 3. **Tipagem** — todo `var`, parâmetro e retorno de função em GDScript é tipado.
 4. **Integridade** — materiais apontam para cores que existem, os artefatos gerados estão
    no lugar, e `assets/generated` está de fato ignorado pelo git.
+5. **Kit** — se o manifesto do Blender existe, toda peça cabe nos tetos *atuais* de
+   `params.py`. Baixar um teto sem rodar `make assets` reprova aqui.
 
 Não precisa do Godot instalado: é tudo análise de texto.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
-from . import gen_assets, gen_audio, gen_params, gen_project, gen_world
+from . import gen_audio, gen_materials, gen_params, gen_project, gen_world
 from . import params as P
 from .util import ROOT
 
@@ -41,6 +44,7 @@ _VAR_RE = re.compile(r"^\s*(?:@\w+(?:\([^)]*\))?\s+)?(?:static\s+)?var\s+(\w+)\s
 _FUNC_RE = re.compile(r"^\s*(?:static\s+)?func\s+(\w+)\s*\(")
 
 _failures: list[str] = []
+_kit_failures_at_entry: list[int] = [0]
 
 
 def _fail(message: str) -> None:
@@ -61,8 +65,8 @@ def check_drift() -> None:
         gen_world.MANIFEST_OUTPUT: gen_world._manifest(),
     }
     for name, (color_key, roughness, metallic) in P.MATERIALS.items():
-        target = gen_assets.OUTPUT_DIR / f"{name}.tres"
-        expected[target] = gen_assets._material_resource(name, color_key, roughness, metallic)
+        target = gen_materials.OUTPUT_DIR / f"{name}.tres"
+        expected[target] = gen_materials._material_resource(name, color_key, roughness, metallic)
     expected[gen_audio.BUS_LAYOUT_OUTPUT] = gen_audio._bus_layout()
 
     for relative, content in expected.items():
@@ -195,6 +199,62 @@ def check_params_integrity() -> None:
         _fail(f"tools/params.py: chão do estágio com {stage_tris} tris estoura o teto.")
 
 
+def check_kit_manifest() -> None:
+    """Confere o manifesto do kit contra os tetos atuais, sem precisar do Blender.
+
+    O kit é derivado e mora em `assets/generated/`, então numa árvore recém-clonada ele
+    simplesmente não existe — e isso não é erro. O que *é* erro é ele existir e estar
+    fora do que `params.py` manda agora: baixar um teto e esquecer de rodar `make assets`
+    deixaria peças fora do orçamento passando despercebidas.
+    """
+    _kit_failures_at_entry[0] = len(_failures)
+    manifest_path = ROOT / P.KIT_DIR / "manifest.json"
+    if not manifest_path.exists():
+        print("  kit: ausente (derivado — rode `make assets`)")
+        return
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    parts = manifest.get("parts", [])
+    if manifest.get("kit_seed") != P.KIT_SEED:
+        _fail(
+            f"{P.KIT_DIR}/manifest.json: gerado com a semente {manifest.get('kit_seed')}, "
+            f"mas params.py diz {P.KIT_SEED}. Rode `make assets`."
+        )
+    if manifest.get("grid_size") != P.GRID_SIZE:
+        _fail(
+            f"{P.KIT_DIR}/manifest.json: grid de {manifest.get('grid_size')} m contra "
+            f"{P.GRID_SIZE} m em params.py. Rode `make assets`."
+        )
+
+    for part in parts:
+        budget = P.KIT_TRI_BUDGET.get(_budget_key(part))
+        if budget is None:
+            _fail(f"kit: peça {part['name']!r} tem categoria desconhecida {part['category']!r}.")
+        elif part["tris"] > budget:
+            _fail(
+                f"kit: {part['name']} com {part['tris']} triângulos estoura o teto atual "
+                f"de {budget}. Rode `make assets`."
+            )
+        missing = ROOT / P.KIT_DIR / part["file"]
+        if not missing.exists():
+            _fail(f"kit: {part['name']} está no manifesto mas {part['file']} não existe.")
+
+    for key in manifest.get("palette", {}):
+        if key not in P.PALETTE:
+            _fail(f"kit: manifesto cita a cor {key!r}, que não existe mais na paleta.")
+
+    before = len(_failures)
+    if before == _kit_failures_at_entry[0]:
+        print(f"  kit: {len(parts)} peças dentro do orçamento")
+
+
+def _budget_key(part: dict) -> str:
+    """Árvore tem teto próprio; o resto usa o teto da categoria."""
+    if part["name"].startswith("tree_"):
+        return "tree"
+    return part["category"]
+
+
 def check_repository() -> None:
     gitignore = ROOT / ".gitignore"
     if not gitignore.exists():
@@ -225,6 +285,7 @@ def main() -> list[Path]:
     check_magic_numbers()
     check_typing()
     check_params_integrity()
+    check_kit_manifest()
     check_repository()
 
     scanned = len(_gdscript_files())

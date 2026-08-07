@@ -10,12 +10,15 @@
 
 PY ?= python3
 GODOT ?= godot
+# Vazio de propósito: com valor, `find_blender()` trata como pedido explícito e
+# reclama se não existir, em vez de procurar no PATH.
+BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project assets audio world verify warnings preview bench clean regen help
+.PHONY: all params project materials assets test-assets audio world verify warnings preview bench clean regen help
 
 ## Regenera tudo e verifica. É o alvo que precisa passar antes de qualquer commit.
-all: params project assets audio world verify
+all: params project materials assets audio world verify
 	@echo "== pronto: projeto regenerado e verificado =="
 
 ## scripts/core/params.gd a partir de tools/params.py.
@@ -28,10 +31,21 @@ project:
 	@echo "== project.godot =="
 	@$(PY) -m tools.gen_project
 
-## Biblioteca de materiais flat + vertex color em assets/generated/materials/.
+## Biblioteca de materiais do Godot em assets/generated/materials/.
+materials:
+	@echo "== materials =="
+	@$(PY) -m tools.gen_materials
+
+## Fábrica de peças em Blender headless: 34 .glb + manifesto em assets/generated/kit/.
+## Uso: make assets [PARTS="wall barrel"]
 assets:
 	@echo "== assets =="
-	@$(PY) -m tools.gen_assets
+	@BLENDER=$(BLENDER) $(PY) -m tools.gen_assets $(PARTS)
+
+## Prova determinismo, propagação da paleta e cobrança do orçamento da fábrica.
+test-assets:
+	@echo "== test-assets =="
+	@BLENDER=$(BLENDER) $(PY) -m tools.test_assets
 
 ## Layout de barramentos e tom de calibração em assets/generated/audio/.
 audio:
@@ -70,7 +84,8 @@ clean:
 	@echo "== clean =="
 	@rm -rf assets/generated
 	@rm -rf .godot
-	@echo "  assets/generated e .godot removidos"
+	@find tools -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+	@echo "  assets/generated, .godot e bytecode removidos"
 
 ## clean + all: a prova de que o projeto inteiro é reprodutível do zero.
 regen: clean all
@@ -80,7 +95,9 @@ help:
 	@echo "  make all      regenera tudo e verifica (sem Godot)"
 	@echo "  make params   scripts/core/params.gd"
 	@echo "  make project  project.godot"
-	@echo "  make assets   materiais"
+	@echo "  make materials biblioteca de materiais do Godot"
+	@echo "  make assets   fábrica de peças no Blender (precisa do Blender)"
+	@echo "  make test-assets prova determinismo e orçamento do kit"
 	@echo "  make audio    barramentos e tom de calibração"
 	@echo "  make world    cenas e manifesto do mundo"
 	@echo "  make verify   cobra a regra inegociável"

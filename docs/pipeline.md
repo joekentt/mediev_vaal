@@ -120,6 +120,82 @@ seguinte pendurava até o timeout. Duas defesas hoje:
 - Quando o Godot estoura o tempo, o erro mostra as linhas de `SCRIPT ERROR` que ele
   chegou a imprimir, para separar "lento" de "travado".
 
+## A fábrica de assets
+
+`make assets` roda `tools/gen_assets.py` dentro do Blender headless e produz 34 `.glb` em
+`assets/generated/kit/`, mais um `manifest.json` com nome, categoria, triângulos, bounding
+box e pegada em células de cada peça.
+
+### Três camadas
+
+```
+tools/params.py       paleta, grid, tetos, semente-mãe
+tools/meshlib.py      primitivas, chanfro, ruído, cor, conferência de normais
+tools/kit_*.py        as 34 peças paramétricas
+tools/gen_assets.py   driver: constrói, confere, exporta, escreve o manifesto
+```
+
+Nenhuma peça exporta a si mesma. Elas devolvem um `BMesh` pintado e o driver faz o resto —
+é o que garante que *toda* peça passe pelas mesmas conferências, sem exceção esquecida.
+
+### Dois pontos de entrada
+
+```
+blender --background --python tools/gen_assets.py -- [nomes]
+python -m tools.gen_assets [nomes]
+```
+
+O segundo procura o binário e reexecuta o primeiro; sem binário, cai para o módulo `bpy`
+do PyPI, que é o mesmo Blender sem a casca de aplicativo. Máquina de desenvolvedor tem o
+binário; CI acha mais fácil `pip install bpy`. Os `.glb` são idênticos nos dois caminhos.
+
+### O que reprova uma peça
+
+O driver levanta `AssetError` e o build inteiro para:
+
+- triângulos acima do teto da categoria (`KIT_TRI_BUDGET`);
+- arestas com faces em sentidos opostos (face invertida na malha);
+- malha fechada com volume assinado negativo (normais para dentro);
+- camada de UV presente;
+- pegada fora do grid nos eixos que a peça declara como modulares.
+
+O alinhamento ao grid é **por eixo, declarado por peça**, e não um booleano global: uma
+parede vence uma célula em X e tem 25 cm de espessura em Y; um telhado ultrapassa a
+célula de propósito, por causa do beiral. Exigir 2 m nos dois eixos de tudo reprovaria o
+kit inteiro sem que nada estivesse errado.
+
+### Duas armadilhas que custaram caro
+
+**O vertex color só é exportado se o material o usar.** O exportador de glTF ignora o
+atributo de cor quando ele não está ligado na árvore de nós do material — e avisa com uma
+linha discreta no meio da conversa do Blender, entregando um `.glb` cinza. `meshlib`
+liga um nó `ShaderNodeVertexColor` na Base Color justamente para isso.
+
+**Blender é Z-up, Godot é Y-up.** A conversão é `(x, y, z) → (x, z, -y)`. Zerar o mínimo
+dos três eixos no Blender daria, no Godot, uma peça de `Z = -espessura` a `0`: a origem
+cairia no canto errado e a fase 6 teria de compensar peça a peça. Por isso
+`snap_origin_to_grid` zera o mínimo em X e Z e o **máximo** em Y. Conferido carregando os
+34 `.glb` no Godot e medindo o AABB, não deduzido do papel.
+
+### O teste
+
+`make test-assets` prova quatro coisas rodando o Blender, não afirmando:
+
+1. mesma semente, dois processos separados → `.glb` idêntico no SHA-256;
+2. semente diferente → arquivo diferente (senão "determinístico" seria só "ignora a
+   semente");
+3. trocar um hex da paleta repinta exatamente as peças que usam aquela cor, e nenhuma
+   outra;
+4. peça acima do teto reprova o build.
+
+> **Cuidado ao editar `params.py` por script.** O Python invalida bytecode comparando
+> mtime **em segundos inteiros** e tamanho do fonte. Trocar `7717` por `7718` ou um hex
+> por outro preserva os dois, então patch e restauração dentro do mesmo segundo deixam o
+> `.pyc` antigo parecendo válido — e o processo seguinte importa os valores errados. O
+> sintoma é pior que o bug: uma prova falha uma vez a cada tantas execuções, acusando a
+> peça errada. `test_assets.py` apaga `tools/__pycache__` antes do primeiro import e
+> proíbe os subprocessos de escrever bytecode.
+
 ## Determinismo
 
 `Params.WORLD_SEED` controla toda a aleatoriedade da geração. Mesmo seed, mesmo mundo,

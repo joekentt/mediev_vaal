@@ -44,7 +44,15 @@ func _initialize() -> void:
 	quit()
 """ % WARNING_PREFIX
 
-_DIAGNOSTIC_RE = re.compile(r"^(SCRIPT ERROR|ERROR):")
+# Só diagnósticos de GDScript. Pegar todo `ERROR:` parecia mais seguro e não era: o
+# importador de cena tenta gerar uma miniatura por arquivo, e no `--headless` o backend
+# de render é o dummy, que devolve nulo e loga
+# `Parameter "t" is null. at: texture_2d_get (.../dummy/storage/texture_storage.h)`.
+# São 34 erros — um por .glb do kit — que somem quando o projeto abre com display de
+# verdade (conferido com xvfb). Reportá-los como "o projeto não está limpo" seria treinar
+# quem lê o alvo a ignorá-lo.
+_DIAGNOSTIC_RE = re.compile(r"^SCRIPT ERROR:")
+_WARNING_AS_ERROR = "Warning treated as error"
 
 
 def _active_warning_keys() -> list[str]:
@@ -96,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
 
     diagnostics = [
         line for line in (process.stdout + process.stderr).splitlines()
-        if _DIAGNOSTIC_RE.match(line) or "Warning treated as error" in line
+        if _DIAGNOSTIC_RE.match(line) or _WARNING_AS_ERROR in line
     ]
 
     if diagnostics:
