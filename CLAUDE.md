@@ -23,6 +23,7 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `scripts/core/params.gd` | `tools/gen_params.py` | `tools/params.py` |
 | `assets/generated/materials/*.tres` | `tools/gen_materials.py` | `tools/params.py` |
 | `assets/generated/kit/*.glb` + manifesto | `tools/gen_assets.py` (Blender) | `tools/params.py` |
+| `assets/generated/characters/*.glb` + manifesto | `tools/gen_characters.py` (Blender) | `tools/params.py` |
 | `assets/generated/audio/*` | `tools/gen_audio.py` | `tools/params.py` |
 | `scenes/world/main.tscn` | `tools/gen_world.py` | `tools/params.py` |
 | Céu, sol, chão, colisão, câmera | `generators/world_generator.gd` | `Params` |
@@ -60,7 +61,8 @@ make params   scripts/core/params.gd
 make project  project.godot
 make materials  biblioteca de materiais do Godot
 make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
-make test-assets prova determinismo, paleta e orçamento  (precisa do Blender)
+make test-assets prova determinismo, paleta, orçamento e rig (precisa do Blender)
+make characters 7 humanoides rigados em .glb + manifesto    (precisa do Blender)
 make audio    barramentos + tom de calibração
 make world    cenas e manifesto do mundo
 make verify   cobra a regra inegociável
@@ -74,13 +76,14 @@ make regen    clean + all — prova de reprodutibilidade
 Depois de clonar o repositório: **`make all` antes de abrir o Godot.** Sem isso a
 biblioteca de materiais não existe e o jogo cai para o magenta de depuração.
 
-`make all` inclui `make assets`, então **precisa do Blender** — pelo binário no `PATH`,
+`make all` inclui `make assets` e `make characters`, então **precisa do Blender** — pelo binário no `PATH`,
 pela variável `BLENDER`, ou pelo módulo `bpy` (`pip install bpy`) no Python que roda o
 `make`. Os três produzem exatamente os mesmos `.glb`; a fábrica confere isso.
 
 ```
 BLENDER=/opt/blender/blender make assets
-make assets PARTS="wall barrel"     # só as peças citadas, para iterar rápido
+make assets PARTS="wall barrel"       # só as peças citadas, para iterar rápido
+make characters WHO="guarda anciao"   # idem, para os corpos
 ```
 
 `make preview` e `make bench` acham o Godot pelo `PATH` ou pela variável `GODOT`:
@@ -128,6 +131,35 @@ não de material novo: material novo é agrupamento perdido e draw call a mais.
 
 Paleta em `tools/params.py`, acessível no jogo por `Params.color(&"stone")`.
 
+### Humanoides
+
+Mesma estética e mesmo caminho: `make characters` monta cada corpo empilhando seções
+(pés, pernas, quadril, tronco, ombros, braços, mãos, pescoço, cabeça) a partir de
+`CHARACTER_ROSTER`. Todas as medidas são **fração da altura**, então mudar `height`
+produz alguém baixo, e não uma miniatura de alguém alto.
+
+- **Membros são cascas contínuas**, não caixas soltas. Caixa nunca rasga porque nunca
+  dobra; anel costurado reparte peso entre dois ossos e o cotovelo dobra de verdade.
+- **Esqueleto Mixamo** (`Params.MIXAMO_BONES`, 21 ossos) — os nomes são contrato com o
+  retargeting do Godot. As posições saem das mesmas medidas da malha.
+- **Skinning é envelope + distância**: cada face nasce carimbada com a seção de corpo a
+  que pertence, e a seção diz quais ossos podem disputá-la. Peso puramente por distância
+  penduraria o peito no úmero. Máximo de 2 influências por vértice.
+- **Rosto não tem geometria de olho.** Olho e boca são planos com vertex color afundados
+  na face. A 900 triângulos, um olho modelado custaria mais que a cabeça inteira.
+- **No Blender o personagem olha para +Y**, e sai olhando para -Z no Godot, que é a
+  frente da engine.
+- **Dois arquivos por corpo**: `<nome>.glb` é o entregável (malha + esqueleto em T-pose)
+  e `<nome>_pose.glb` é prova — a mesma malha já deformada na pose de teste. É a
+  geometria que o catálogo mostra e que o teste de rasgo mede.
+
+`make characters` reprova o build quando um corpo estoura `TRI_BUDGET["npc"]`, quando um
+vértice ganha mais de `BONE_MAX_INFLUENCES` ossos, ou quando uma aresta estica acima de
+`CHARACTER_MAX_EDGE_STRETCH` na pose de teste — que é a forma executável de "nenhum
+vértice se deforma de forma quebrada". `prova_baixo` e `prova_alto` existem só para o
+critério de silhueta: diferem apenas em altura e ombros, e a fábrica mede se a diferença
+chegou à malha.
+
 ---
 
 ## Estrutura
@@ -138,7 +170,8 @@ Paleta em `tools/params.py`, acessível no jogo por `Params.color(&"stone")`.
   gen_*.py          geradores (params, project, materials, assets, audio, world)
   meshlib.py        helpers de malha no Blender: primitivas, chanfro, ruído, cor
   kit_*.py          as 34 peças paramétricas (arquitetura, props, natureza)
-  test_assets.py    prova determinismo, paleta e orçamento do kit
+  gen_characters.py humanoides rigados: corpo, esqueleto Mixamo, skinning e prova de pose
+  test_assets.py    prova determinismo, paleta, orçamento e rig
   verify.py         cobra a regra inegociável
   preview_assets.py renderiza cada peça em 4 ângulos, com figura de escala (Blender)
   contact_sheet.py  monta docs/assets.html a partir dos renders e do manifesto
@@ -159,6 +192,7 @@ Paleta em `tools/params.py`, acessível no jogo por `Params.color(&"stone")`.
 /resources          dados de design gerados (raças, diálogos, itens), versionados
 /assets/generated   DERIVADO — no .gitignore, volta com `make all`
   kit/              as 34 peças em .glb + manifest.json
+  characters/       os 7 humanoides em .glb com esqueleto + manifest.json
 /docs               documentação do pipeline
   assets.html       catálogo visual do kit (derivado)
   bench_history.csv VERSIONADO: uma linha por execução de `make bench`
@@ -357,8 +391,10 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    Interiores gerados por planta, mobiliário procedural, iluminação interna dentro do
    teto de luzes com sombra.
 
-10. **NPCs e rotinas**
-   Corpos gerados por composição paramétrica, agenda diária guiada por
+10. **NPCs e rotinas** — *metade de asset adiantada*
+   Os **corpos** já existem: `tools/gen_characters.py` gera os 7 humanoides rigados,
+   fora de ordem e a pedido explícito, com animação, IA e gameplay deliberadamente de
+   fora. O que resta desta fase é o comportamento: agenda diária guiada por
    `EventBus.hour_changed`, teto de 40 ativos com simulação abstrata acima disso,
    navegação pela cidade.
 

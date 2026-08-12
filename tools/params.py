@@ -335,6 +335,124 @@ MOUSE_SENSITIVITY_MIN = 0.02
 MOUSE_SENSITIVITY_MAX = 1.0
 
 # ---------------------------------------------------------------------------
+# Humanoides
+# ---------------------------------------------------------------------------
+# Corpo montado por seções empilhadas: cada altura-chave abaixo é uma fração da altura
+# total, então mudar `height` reescala a figura inteira sem quebrar proporção. Larguras
+# também são fração da altura — é o que faz um sujeito de 1,50 m parecer um sujeito
+# baixo, e não uma miniatura de um alto.
+
+CHARACTER_DIR = "assets/generated/characters"
+CHARACTER_SEED = 4409
+CHARACTER_RING_SIDES = 6        # lados da seção de tronco e membros
+
+# Alturas-chave, em fração da altura total (chão = 0, topo da cabeça = 1).
+BODY_LEVELS: dict[str, float] = {
+    "ankle":      0.055,
+    "knee":       0.280,
+    "hip":        0.520,
+    "waist":      0.620,
+    "chest":      0.740,
+    "shoulder":   0.820,
+    "neck_base":  0.855,
+    "head_base":  0.875,
+    "head_top":   1.000,
+}
+
+# Semi-larguras e semi-profundidades, em fração da altura total.
+BODY_WIDTHS: dict[str, float] = {
+    "hip_x":        0.098, "hip_z":      0.062,
+    "waist_x":      0.085, "waist_z":    0.055,
+    "chest_x":      0.103, "chest_z":    0.060,
+    "shoulder_x":   0.125, "shoulder_z": 0.062,
+    "neck_x":       0.035, "neck_z":     0.035,
+    "head_x":       0.062, "head_z":     0.070,
+    "upper_arm":    0.032, "fore_arm":   0.026,
+    "thigh":        0.055, "calf":       0.041,
+    "hand_x":       0.030, "hand_y":     0.022, "hand_z":  0.075,
+    "foot_x":       0.045, "foot_y":     0.115, "foot_z":  0.030,
+}
+
+# Postura: inclinação em graus de tronco, pescoço e joelho. É o que separa um guarda de
+# um velho de um batedor sem tocar em nenhuma outra medida.
+POSTURES: dict[str, dict[str, float]] = {
+    "ereto":    {"spine": 0.0,  "neck": 0.0,  "knee": 0.0,  "shoulder_drop": 0.0},
+    "curvado":  {"spine": 14.0, "neck": 10.0, "knee": 4.0,  "shoulder_drop": 0.022},
+    "agil":     {"spine": 6.0,  "neck": -4.0, "knee": 9.0,  "shoulder_drop": -0.008},
+}
+
+EAR_TYPES = ("humana", "pontuda", "larga")
+HAIR_TYPES = ("nenhum", "curto", "longo", "rabo")
+CLOTHING_TYPES = ("nenhuma", "tunica", "capuz", "avental", "capa", "armadura_leve")
+
+# Esqueleto no padrão Mixamo, que é o que o retargeting do Godot entende. Só os nomes e a
+# contagem moram aqui: as *posições* de cada osso saem das medidas do corpo, em
+# `gen_characters.build_skeleton`, para o osso nascer dentro da carne mesmo quando a
+# postura inclina o tronco.
+MIXAMO_BONES: tuple[str, ...] = ("Hips", "Spine", "Chest", "Neck", "Head") + tuple(
+    f"{side}{bone}"
+    for side in ("Left", "Right")
+    for bone in ("Shoulder", "Arm", "ForeArm", "Hand", "UpLeg", "Leg", "Foot", "Toe")
+)
+
+BONE_MAX_INFLUENCES = 2         # limite de ossos por vértice
+BONE_WEIGHT_POWER = 3.0         # expoente da queda por distância
+BONE_INFLUENCE_RADIUS = 0.30    # fração da altura; além disso o osso não pesa
+
+# Pose de teste: rotação local em graus por osso. Existe para provar que a malha não
+# rasga fora da T-pose — é o único jeito de flagrar skinning ruim antes da animação.
+TEST_POSE: dict[str, tuple[float, float, float]] = {
+    "LeftArm":       (0.0, 0.0, -55.0),
+    "RightArm":      (0.0, 0.0, 55.0),
+    "LeftForeArm":   (-65.0, 0.0, 0.0),
+    "RightForeArm":  (-65.0, 0.0, 0.0),
+    "LeftUpLeg":     (-35.0, 0.0, 0.0),
+    "LeftLeg":       (55.0, 0.0, 0.0),
+    "RightUpLeg":    (18.0, 0.0, 0.0),
+    "Spine":         (-8.0, 12.0, 0.0),
+    "Neck":          (6.0, -14.0, 0.0),
+    "Head":          (0.0, 10.0, 0.0),
+}
+
+# Quanto uma aresta pode esticar na pose de teste antes de contar como rasgo. Um rig com
+# 2 influências estica um pouco na dobra; 2x é folga suficiente para o normal e apertada
+# o bastante para pegar vértice preso no osso errado.
+CHARACTER_MAX_EDGE_STRETCH = 2.0
+
+# Meia volta aplicada ao personagem no catálogo. O kit tem a frente em -Y, que é o lado
+# para onde a câmera de preview olha; o humanoide tem de olhar para +Y no Blender para
+# nascer virado para -Z no Godot, que é a frente da engine. Sem isto o catálogo mostraria
+# quatro vistas da nuca.
+CHARACTER_PREVIEW_SPIN = 180.0
+
+# Elenco gerado por `make characters`. A primeira coluna é o nome do arquivo; o resto são
+# os parâmetros que mudam a silhueta. Duas entradas existem só para o critério de aceite:
+# `prova_alto` e `prova_baixo` diferem apenas em altura e largura de ombros.
+CHARACTER_ROSTER: tuple[dict, ...] = (
+    {"name": "aldeao",      "height": 1.72, "shoulders": 1.00, "leg_ratio": 1.00,
+     "torso": 1.00, "head": 1.00, "posture": "ereto",   "beard": False,
+     "ears": "humana",  "hair": "curto", "clothing": "tunica"},
+    {"name": "guarda",      "height": 1.84, "shoulders": 1.18, "leg_ratio": 1.02,
+     "torso": 1.15, "head": 0.96, "posture": "ereto",   "beard": True,
+     "ears": "humana",  "hair": "curto", "clothing": "armadura_leve"},
+    {"name": "ferreiro",    "height": 1.70, "shoulders": 1.26, "leg_ratio": 0.94,
+     "torso": 1.22, "head": 1.02, "posture": "ereto",   "beard": True,
+     "ears": "humana",  "hair": "nenhum", "clothing": "avental"},
+    {"name": "anciao",      "height": 1.62, "shoulders": 0.90, "leg_ratio": 0.96,
+     "torso": 0.94, "head": 1.06, "posture": "curvado", "beard": True,
+     "ears": "larga",   "hair": "longo", "clothing": "capuz"},
+    {"name": "batedor",     "height": 1.75, "shoulders": 0.96, "leg_ratio": 1.08,
+     "torso": 0.92, "head": 0.98, "posture": "agil",    "beard": False,
+     "ears": "pontuda", "hair": "rabo",  "clothing": "capa"},
+    {"name": "prova_baixo", "height": 1.45, "shoulders": 0.80, "leg_ratio": 1.00,
+     "torso": 1.00, "head": 1.00, "posture": "ereto",   "beard": False,
+     "ears": "humana",  "hair": "curto", "clothing": "nenhuma"},
+    {"name": "prova_alto",  "height": 2.05, "shoulders": 1.35, "leg_ratio": 1.00,
+     "torso": 1.00, "head": 1.00, "posture": "ereto",   "beard": False,
+     "ears": "humana",  "hair": "curto", "clothing": "nenhuma"},
+)
+
+# ---------------------------------------------------------------------------
 # Olhos: renderização de catálogo e capturas
 # ---------------------------------------------------------------------------
 # Esta fase existe porque quem escreve o gerador não vê o que ele gera.
@@ -360,7 +478,11 @@ PREVIEW_ANGLES: tuple[tuple[str, tuple[float, float, float]], ...] = (
     ("frente",  (0.0, 0.0, 0.0)),
     ("3/4",     (0.0, 0.0, -45.0)),
     ("lateral", (0.0, 0.0, -90.0)),
-    ("topo",    (-90.0, 0.0, 0.0)),
+    # +90 e não -90: a câmera olha ao longo de +Y, então girar -90 em X manda o topo da
+    # peça para *longe* dela e o que se vê é a sola. O quadrante dizia "topo" e mostrava
+    # o fundo desde a fase 3 — apareceu ao olhar o primeiro humanoide de cima e encontrar
+    # o vão escuro da bainha da túnica onde devia estar o cabelo.
+    ("topo",    (90.0, 0.0, 0.0)),
 )
 
 # Luz neutra de três pontos: principal, preenchimento e contra. Ângulos em graus

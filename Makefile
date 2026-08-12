@@ -15,10 +15,10 @@ GODOT ?= godot
 BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project materials assets test-assets audio world verify warnings preview bench clean regen help
+.PHONY: all params project materials assets test-assets characters audio world verify warnings preview bench clean regen help
 
 ## Regenera tudo e verifica. É o alvo que precisa passar antes de qualquer commit.
-all: params project materials assets audio world verify
+all: params project materials assets characters audio world verify
 	@echo "== pronto: projeto regenerado e verificado =="
 
 ## scripts/core/params.gd a partir de tools/params.py.
@@ -46,6 +46,12 @@ assets:
 test-assets:
 	@echo "== test-assets =="
 	@BLENDER=$(BLENDER) $(PY) -m tools.test_assets
+
+## Humanoides rigados em assets/generated/characters/: .glb com esqueleto + manifesto.
+## Uso: make characters [WHO="guarda anciao"]
+characters:
+	@echo "== characters =="
+	@BLENDER=$(BLENDER) $(PY) -m tools.gen_characters $(WHO)
 
 ## Layout de barramentos e tom de calibração em assets/generated/audio/.
 audio:
@@ -99,6 +105,7 @@ help:
 	@echo "  make materials biblioteca de materiais do Godot"
 	@echo "  make assets   fábrica de peças no Blender (precisa do Blender)"
 	@echo "  make test-assets prova determinismo e orçamento do kit"
+	@echo "  make characters humanoides rigados (precisa do Blender)"
 	@echo "  make audio    barramentos e tom de calibração"
 	@echo "  make world    cenas e manifesto do mundo"
 	@echo "  make verify   cobra a regra inegociável"

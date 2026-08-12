@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
 from tools import params as P  # noqa: E402
 
 MANIFEST = ROOT / P.KIT_DIR / "manifest.json"
+CHARACTER_MANIFEST = ROOT / P.CHARACTER_DIR / "manifest.json"
 IMAGE_DIR = ROOT / P.PREVIEW_IMAGE_DIR
 OUTPUT = ROOT / P.PREVIEW_SHEET
 
@@ -65,6 +66,7 @@ details[open] summary::before { transform: rotate(90deg); }
 summary .count { color: var(--dim); font-weight: 400; font-size: .88rem; }
 .grid { display: grid; gap: 1rem; padding: 0 1.1rem 1.2rem;
         grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+.grid.wide { grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr)); }
 figure { margin: 0; background: #191820; border: 1px solid var(--line);
          border-radius: 8px; overflow: hidden; }
 figure img { display: block; width: 100%; height: auto; background: #5a5a5a; }
@@ -78,6 +80,13 @@ figcaption { padding: .6rem .75rem .7rem; }
 .bar.tight i { background: var(--warn); }
 .missing { padding: 3rem .75rem; text-align: center; color: var(--warn);
            font-size: .85rem; }
+.poses { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+.pose { position: relative; }
+.pose span { position: absolute; left: .35rem; top: .35rem; background: #000a;
+             color: var(--ink); font-size: .68rem; padding: .05rem .3rem;
+             border-radius: 3px; letter-spacing: .04em; }
+.tags { color: var(--dim); font-size: .75rem; margin-top: .2rem; }
+.ok { color: var(--accent); }
 footer { max-width: 76rem; margin: 2.5rem auto 0; color: var(--dim); font-size: .8rem;
          border-top: 1px solid var(--line); padding-top: 1rem; }
 code { background: #2a2831; padding: .1rem .35rem; border-radius: 4px; font-size: .85em; }
@@ -110,6 +119,68 @@ def _figure(entry: dict) -> str:
       </figure>"""
 
 
+def _image(name: str, label: str) -> str:
+    """Uma imagem do catálogo, ou o buraco visível que diz que ela falta."""
+    if not (IMAGE_DIR / f"{name}.png").exists():
+        return f'<div class="missing">sem render de {html.escape(label)}</div>'
+    relative = Path(P.PREVIEW_IMAGE_DIR).name + "/" + f"{name}.png"
+    return (
+        f'<div class="pose"><img src="{relative}" alt="{html.escape(name)}" loading="lazy">'
+        f'<span>{html.escape(label)}</span></div>'
+    )
+
+
+def _character_figure(entry: dict, suffix: str, limit: float) -> str:
+    """Um personagem: T-pose à esquerda, pose de teste à direita.
+
+    As duas imagens lado a lado são o argumento inteiro. A da esquerda diz que a
+    silhueta saiu certa; só a da direita diz que o skinning aguenta — em T-pose todo rig
+    parece impecável, porque nenhum osso girou ainda.
+    """
+    name = html.escape(entry["name"])
+    width, depth, height = entry["size"]
+    ratio = entry["tris"] / entry["budget"] if entry["budget"] else 0.0
+    tight = " tight" if ratio > _TIGHT_RATIO else ""
+    stretch = entry["max_edge_stretch"]
+    verdict = "ok" if stretch <= limit else "warn"
+
+    tags = " &middot; ".join(html.escape(str(entry[key])) for key in
+                             ("posture", "clothing", "hair", "ears"))
+    return f"""      <figure>
+        <div class="poses">
+{_image(entry['name'], 'T-pose')}
+{_image(entry['name'] + suffix, 'pose de teste')}
+        </div>
+        <figcaption>
+          <div class="name">{name}</div>
+          <div class="meta">{entry['tris']} / {entry['budget']} tris &middot;
+            {entry['bones']} ossos &middot; {entry['height']:g} m &middot;
+            ombro {entry['shoulder_span']:g} m</div>
+          <div class="meta">envergadura {width:g} &times; {depth:g} &times; {height:g} m
+            &middot; até {entry['influences_max']} ossos por vértice &middot;
+            <span class="{verdict}">estica {stretch:g}x</span> (limite {limit:g}x)</div>
+          <div class="tags">{tags}{' &middot; barba' if entry['beard'] else ''}</div>
+          <div class="bar{tight}"><i style="width:{min(100.0, ratio * 100.0):.0f}%"></i></div>
+        </figcaption>
+      </figure>"""
+
+
+def _character_section(manifest: dict) -> str:
+    entries = manifest["characters"]
+    total = sum(entry["tris"] for entry in entries)
+    figures = "\n".join(
+        _character_figure(entry, manifest["pose_suffix"], manifest["max_edge_stretch"])
+        for entry in entries
+    )
+    return f"""    <details open>
+      <summary>Personagens <span class="count">{len(entries)} corpos &middot; {total} tris
+        &middot; teto de {manifest['tri_budget']} tris cada</span></summary>
+      <div class="grid wide">
+{figures}
+      </div>
+    </details>"""
+
+
 def _section(category: str, entries: list[dict]) -> str:
     label = CATEGORY_LABELS.get(category, category)
     total = sum(entry["tris"] for entry in entries)
@@ -122,7 +193,7 @@ def _section(category: str, entries: list[dict]) -> str:
     </details>"""
 
 
-def render(manifest: dict) -> str:
+def render(manifest: dict, characters: dict | None = None) -> str:
     parts = manifest["parts"]
     by_category: dict[str, list[dict]] = {}
     for entry in parts:
@@ -131,7 +202,10 @@ def render(manifest: dict) -> str:
     order = [key for key in CATEGORY_LABELS if key in by_category]
     order += [key for key in by_category if key not in CATEGORY_LABELS]
     sections = "\n".join(_section(key, by_category[key]) for key in order)
+    if characters is not None:
+        sections = _character_section(characters) + "\n" + sections
 
+    people = 0 if characters is None else len(characters["characters"])
     rendered = sum(1 for entry in parts if (IMAGE_DIR / f"{entry['name']}.png").exists())
     angles = ", ".join(label for label, _ in P.PREVIEW_ANGLES)
 
@@ -149,8 +223,9 @@ def render(manifest: dict) -> str:
   </div>
   <div class="totals">
     <div class="total"><b>{len(parts)}</b><span>peças</span></div>
-    <div class="total"><b>{manifest['total_tris']}</b><span>triângulos</span></div>
-    <div class="total"><b>{rendered}/{len(parts)}</b><span>renderizadas</span></div>
+    <div class="total"><b>{people}</b><span>personagens</span></div>
+    <div class="total"><b>{manifest['total_tris']}</b><span>triângulos do kit</span></div>
+    <div class="total"><b>{rendered}/{len(parts)}</b><span>peças renderizadas</span></div>
     <div class="total"><b>{len(manifest['palette'])}</b><span>cores na paleta</span></div>
   </div>
 </header>
@@ -173,13 +248,18 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    characters = (
+        json.loads(CHARACTER_MANIFEST.read_text(encoding="utf-8"))
+        if CHARACTER_MANIFEST.exists() else None
+    )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(render(manifest), encoding="utf-8")
+    OUTPUT.write_text(render(manifest, characters), encoding="utf-8")
 
     parts = manifest["parts"]
     missing = [entry["name"] for entry in parts
                if not (IMAGE_DIR / f"{entry['name']}.png").exists()]
-    print(f"  catálogo: {OUTPUT.relative_to(ROOT)} ({len(parts)} peças)")
+    people = 0 if characters is None else len(characters["characters"])
+    print(f"  catálogo: {OUTPUT.relative_to(ROOT)} ({len(parts)} peças, {people} personagens)")
     if missing:
         print(f"  sem render: {', '.join(missing)} — rode `make preview`")
     return 0

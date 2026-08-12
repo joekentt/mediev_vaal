@@ -1,6 +1,6 @@
 """`make test-assets` — prova as garantias da fábrica em vez de afirmá-las.
 
-Quatro provas, todas executáveis:
+Cinco provas, todas executáveis:
 
 1. **Determinismo byte a byte.** A mesma peça gerada duas vezes, em processos separados,
    produz `.glb` idêntico no hash. Rodar em processos separados é o ponto: dentro de um
@@ -11,6 +11,10 @@ Quatro provas, todas executáveis:
    aquela cor — e só delas. É o critério de aceite "trocar uma cor e regerar muda todas
    as peças coerentemente", verificado e não prometido.
 4. **O orçamento reprova.** Uma peça acima do teto faz o build falhar, não avisar.
+5. **O humanoide sai rigado, e sai igual.** Mesmas duas passadas em processos separados
+   para os corpos, mais a leitura do bloco JSON do `.glb` para confirmar que `JOINTS_0`,
+   `WEIGHTS_0` e `COLOR_0` chegaram ao arquivo. O exportador do glTF avisa e continua
+   quando não consegue escrever pele — o arquivo sai bonito e vazio.
 
 Precisa do Blender (binário ou módulo `bpy`), porque é ele que gera o que estamos
 conferindo.
@@ -38,6 +42,11 @@ from tools import gen_assets  # noqa: E402
 from tools import params as P  # noqa: E402
 
 KIT_DIR = ROOT / P.KIT_DIR
+CHARACTER_DIR = ROOT / P.CHARACTER_DIR
+
+# Cabeçalho do container .glb: 12 bytes de arquivo, 8 por bloco. Estrutural, do formato.
+_GLB_HEADER = 12
+_GLB_CHUNK_HEADER = 8
 
 # A prova de determinismo roda sobre o kit **inteiro**, não sobre uma amostra. Custa
 # ~1 s por passada e a amostra já mentiu uma vez: ela não incluía `beam`, a única peça
@@ -62,12 +71,16 @@ def _digest(path: Path) -> str:
 
 
 def _run_factory(parts: tuple[str, ...], expect_failure: bool = False) -> int:
-    """Roda a fábrica num processo novo. Processo novo é parte da prova.
+    return _run_module("tools.gen_assets", parts, expect_failure)
+
+
+def _run_module(module: str, parts: tuple[str, ...], expect_failure: bool = False) -> int:
+    """Roda um gerador num processo novo. Processo novo é parte da prova.
 
     `expect_failure` cala a saída quando a falha *é* o resultado esperado — senão a prova
     4 despeja catorze mensagens de erro corretas no meio de um teste que passou.
     """
-    command = [sys.executable, "-m", "tools.gen_assets", *parts]
+    command = [sys.executable, "-m", module, *parts]
     environment = dict(os.environ)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"   # ver _purge_bytecode()
     process = subprocess.run(
@@ -110,6 +123,62 @@ def test_deterministic() -> None:
     if not drifted:
         combined = hashlib.sha256("".join(first[name] for name in every).encode()).hexdigest()
         print(f"      {len(every)} peças estáveis, hash do kit {combined[:16]}")
+
+
+def test_characters_are_rigged_and_deterministic() -> None:
+    """Prova 5: humanoide sai igual byte a byte e sai de fato rigado.
+
+    Duas coisas numa passada, porque as duas dependem do mesmo par de execuções. A
+    primeira é a de sempre: mesma semente, processos separados, `.glb` idêntico. A
+    segunda é o contrato do formato — o exportador do glTF **avisa e continua** quando
+    não consegue escrever pele ou cor de vértice, e o arquivo sai bonito e vazio. Ler o
+    bloco JSON do `.glb` é a única forma de saber que `JOINTS_0`, `WEIGHTS_0` e `COLOR_0`
+    chegaram lá; o silêncio do log já mentiu uma vez neste projeto.
+    """
+    import json
+    import struct
+
+    entry_failures = len(_failures)
+    names = tuple(spec["name"] for spec in P.CHARACTER_ROSTER)
+    print(f"  [5] {len(names)} humanoides idênticos entre processos, e com pele no .glb")
+
+    def snapshot() -> dict[str, str]:
+        return {name: _digest(CHARACTER_DIR / f"{name}.glb") for name in names}
+
+    if _run_module("tools.gen_characters", ()) != 0:
+        _fail("a fábrica de personagens não rodou na primeira passada")
+        return
+    first = snapshot()
+    if _run_module("tools.gen_characters", ()) != 0:
+        _fail("a fábrica de personagens não rodou na segunda passada")
+        return
+    second = snapshot()
+
+    drifted = [name for name in names if first[name] != second[name]]
+    for name in drifted:
+        _fail(f"{name}: hash mudou entre execuções ({first[name][:12]} != {second[name][:12]})")
+
+    required = {"POSITION", "NORMAL", "COLOR_0", "JOINTS_0", "WEIGHTS_0"}
+    for name in names:
+        blob = (CHARACTER_DIR / f"{name}.glb").read_bytes()
+        length = struct.unpack_from("<I", blob, _GLB_HEADER)[0]
+        document = json.loads(blob[_GLB_HEADER + _GLB_CHUNK_HEADER:][:length])
+        attributes = set(document["meshes"][0]["primitives"][0]["attributes"])
+        if not required <= attributes:
+            _fail(f"{name}.glb: faltam atributos {sorted(required - attributes)}")
+        if not document.get("skins"):
+            _fail(f"{name}.glb: saiu sem esqueleto.")
+        elif len(document["skins"][0]["joints"]) != len(P.MIXAMO_BONES):
+            _fail(
+                f"{name}.glb: {len(document['skins'][0]['joints'])} ossos, "
+                f"e o esqueleto padrão tem {len(P.MIXAMO_BONES)}."
+            )
+        if document.get("textures") or document.get("images"):
+            _fail(f"{name}.glb: tem textura — o projeto é vertex color e nada mais.")
+
+    if len(_failures) == entry_failures:
+        combined = hashlib.sha256("".join(first[name] for name in names).encode()).hexdigest()
+        print(f"      {len(names)} corpos estáveis, hash do elenco {combined[:16]}")
 
 
 def test_seed_changes_output() -> None:
@@ -252,11 +321,12 @@ def main(argv: list[str] | None = None) -> int:
     test_seed_changes_output()
     test_palette_propagates()
     test_budget_is_enforced()
+    test_characters_are_rigged_and_deterministic()
 
     if _failures:
         print(f"\n  {len(_failures)} prova(s) falharam.", file=sys.stderr)
         return 1
-    print("\n  4 provas passaram: determinismo, semente, paleta e orçamento")
+    print("\n  5 provas passaram: determinismo, semente, paleta, orçamento e rig")
     return 0
 
 

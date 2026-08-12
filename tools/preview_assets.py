@@ -30,6 +30,7 @@ from tools import params as P  # noqa: E402
 
 IMAGE_DIR = ROOT / P.PREVIEW_IMAGE_DIR
 MANIFEST = ROOT / P.KIT_DIR / "manifest.json"
+CHARACTER_MANIFEST = ROOT / P.CHARACTER_DIR / "manifest.json"
 
 # Proporções da figura de escala, como fração da altura total.
 _FIGURE = {
@@ -159,15 +160,33 @@ def _load_part(path: Path):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=str(path))
     imported = [obj for obj in bpy.data.objects if obj not in before]
-    meshes = [obj for obj in imported if obj.type == "MESH"]
+
+    # Um arquivo com esqueleto traz malha demais. O importador cria uma `Icosphere` de
+    # 80 faces para *desenhar* os ossos no viewport — ela não está no .glb, é enfeite de
+    # editor — e `bpy.data.objects` não sai em ordem alfabética nem de inserção. Pegar a
+    # primeira malha da lista dava o corpo em cinco dos sete personagens e a bola nos
+    # outros dois, o que no catálogo aparecia como duas peças de pedra no meio do elenco.
+    shapes = {
+        pose_bone.custom_shape
+        for obj in imported if obj.type == "ARMATURE"
+        for pose_bone in obj.pose.bones if pose_bone.custom_shape is not None
+    }
+    meshes = [obj for obj in imported if obj.type == "MESH" and obj not in shapes]
     if not meshes:
         raise RuntimeError(f"{path.name}: nenhuma malha no arquivo")
 
+    # Empate desfeito pela contagem de faces e, só então, pelo nome: qualquer critério
+    # serve desde que não dependa da ordem em que o importador entregou os objetos.
+    meshes.sort(key=lambda obj: (-len(obj.data.polygons), obj.name))
     mesh = meshes[0]
     world = mesh.matrix_world.copy()
     mesh.parent = None
     mesh.data.transform(world)
     mesh.matrix_world = Matrix.Identity(4)
+    # Um personagem chega com armature e modificador. Aqui o que interessa é a forma em
+    # repouso: o esqueleto vai embora com o resto dos objetos importados, e um
+    # modificador apontando para um objeto apagado deformaria a malha para lugar nenhum.
+    mesh.modifiers.clear()
 
     for obj in imported:
         if obj is not mesh:
@@ -210,8 +229,14 @@ def _place_copy(source, rotation_deg: tuple[float, float, float], cell_center):
     return copy
 
 
-def render_part(entry: dict, source_dir: Path, output: Path) -> None:
-    """Renderiza os quatro ângulos de uma peça, com a figura de escala à esquerda."""
+def render_part(entry: dict, source_dir: Path, output: Path, spin: float = 0.0) -> None:
+    """Renderiza os quatro ângulos de uma peça, com a figura de escala à esquerda.
+
+    `spin` gira a peça em Z antes dos quatro ângulos. Serve para os personagens: o kit
+    tem a frente em -Y, que é para onde a câmera olha, mas um humanoide precisa olhar
+    para +Y no Blender para nascer virado para a frente no Godot. Sem meia volta aqui, o
+    catálogo mostraria quatro vistas da nuca.
+    """
     import bpy
     from mathutils import Vector
 
@@ -241,7 +266,8 @@ def render_part(entry: dict, source_dir: Path, output: Path) -> None:
             0.0,
             cell * (0.5 - row) - cell * 0.5 + cell * 0.5,
         )
-        _place_copy(part, rotation, center)
+        spun = (rotation[0], rotation[1], rotation[2] + spin)
+        _place_copy(part, spun, center)
 
     bpy.data.objects.remove(part, do_unlink=True)
 
@@ -265,6 +291,43 @@ def render_part(entry: dict, source_dir: Path, output: Path) -> None:
     bpy.ops.render.render(write_still=True)
 
 
+def _render_characters(selected: list[str]) -> int:
+    """Cada personagem sai duas vezes: em T-pose e já dobrado na pose de teste.
+
+    A segunda imagem é o ponto. Uma malha em T-pose bonita não diz nada sobre o skinning
+    — todo rig parece perfeito antes de o primeiro osso girar. O `<nome>_pose.glb` que a
+    fábrica assa é a mesma malha que o teste de rasgo mediu, então a imagem e o número
+    olham exatamente para a mesma geometria.
+    """
+    import json
+
+    if not CHARACTER_MANIFEST.exists():
+        print("  personagens: ausente (derivado — rode `make characters`)")
+        return 0
+
+    manifest = json.loads(CHARACTER_MANIFEST.read_text(encoding="utf-8"))
+    characters = manifest["characters"]
+    if selected:
+        characters = [entry for entry in characters if entry["name"] in selected]
+
+    suffix = manifest["pose_suffix"]
+    for entry in characters:
+        for name, source in (
+            (entry["name"], entry["file"]),
+            (entry["name"] + suffix, entry["pose_file"]),
+        ):
+            output = IMAGE_DIR / f"{name}.png"
+            render_part(
+                {"file": source, "size": entry["size"]},
+                ROOT / P.CHARACTER_DIR,
+                output,
+                spin=P.CHARACTER_PREVIEW_SPIN,
+            )
+            print(f"  {name:<16} {output.relative_to(ROOT)}")
+    print(f"  {len(characters)} personagens renderizados em T-pose e na pose de teste")
+    return 0
+
+
 def run_in_blender(selected: list[str]) -> int:
     import json
 
@@ -283,7 +346,7 @@ def run_in_blender(selected: list[str]) -> int:
         render_part(entry, ROOT / P.KIT_DIR, output)
         print(f"  {entry['name']:<16} {output.relative_to(ROOT)}")
     print(f"  {len(parts)} peças renderizadas em {IMAGE_DIR.relative_to(ROOT)}")
-    return 0
+    return _render_characters(selected)
 
 
 def main(argv: list[str] | None = None) -> int:

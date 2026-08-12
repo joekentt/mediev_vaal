@@ -11,8 +11,9 @@ Cobre quatro coisas, e reprova o build em qualquer uma:
 3. **Tipagem** — todo `var`, parâmetro e retorno de função em GDScript é tipado.
 4. **Integridade** — materiais apontam para cores que existem, os artefatos gerados estão
    no lugar, e `assets/generated` está de fato ignorado pelo git.
-5. **Kit** — se o manifesto do Blender existe, toda peça cabe nos tetos *atuais* de
-   `params.py`. Baixar um teto sem rodar `make assets` reprova aqui.
+5. **Kit e personagens** — se os manifestos do Blender existem, toda peça e todo corpo
+   cabem nos tetos *atuais* de `params.py`. Baixar um teto sem rodar `make assets` ou
+   `make characters` reprova aqui.
 
 Não precisa do Godot instalado: é tudo análise de texto.
 """
@@ -250,6 +251,67 @@ def check_kit_manifest() -> None:
         print(f"  kit: {len(parts)} peças dentro do orçamento")
 
 
+def check_character_manifest() -> None:
+    """Mesmo contrato do kit, para os humanoides: o manifesto tem de bater com params.py.
+
+    Vale a pena repetir por quê: baixar `TRI_BUDGET['npc']` ou apertar
+    `CHARACTER_MAX_EDGE_STRETCH` sem rodar `make characters` deixaria corpos fora do
+    orçamento e rigs fora do limite passando batido, porque o número que reprova está no
+    manifesto e não é recalculado por ninguém.
+    """
+    entry_failures = len(_failures)
+    manifest_path = ROOT / P.CHARACTER_DIR / "manifest.json"
+    if not manifest_path.exists():
+        print("  personagens: ausente (derivado — rode `make characters`)")
+        return
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    characters = manifest.get("characters", [])
+    ceiling = P.TRI_BUDGET["npc"]
+
+    if manifest.get("character_seed") != P.CHARACTER_SEED:
+        _fail(
+            f"{P.CHARACTER_DIR}/manifest.json: gerado com a semente "
+            f"{manifest.get('character_seed')}, mas params.py diz {P.CHARACTER_SEED}. "
+            f"Rode `make characters`."
+        )
+
+    roster = {spec["name"] for spec in P.CHARACTER_ROSTER}
+    generated = {entry["name"] for entry in characters}
+    if roster != generated:
+        _fail(
+            f"personagens: o manifesto tem {sorted(generated)} e params.py pede "
+            f"{sorted(roster)}. Rode `make characters`."
+        )
+
+    for entry in characters:
+        if entry["tris"] > ceiling:
+            _fail(
+                f"personagens: {entry['name']} com {entry['tris']} triângulos estoura o "
+                f"teto atual de {ceiling}. Rode `make characters`."
+            )
+        if entry["influences_max"] > P.BONE_MAX_INFLUENCES:
+            _fail(
+                f"personagens: {entry['name']} tem vértice com {entry['influences_max']} "
+                f"influências, acima do limite de {P.BONE_MAX_INFLUENCES}."
+            )
+        if entry["max_edge_stretch"] > P.CHARACTER_MAX_EDGE_STRETCH:
+            _fail(
+                f"personagens: {entry['name']} estica {entry['max_edge_stretch']}x na pose "
+                f"de teste, acima do limite atual de {P.CHARACTER_MAX_EDGE_STRETCH:g}x."
+            )
+        for key in ("file", "pose_file"):
+            if not (ROOT / P.CHARACTER_DIR / entry[key]).exists():
+                _fail(f"personagens: {entry['name']} cita {entry[key]}, que não existe.")
+
+    if len(_failures) == entry_failures and characters:
+        worst = max(entry["max_edge_stretch"] for entry in characters)
+        print(
+            f"  personagens: {len(characters)} corpos dentro do orçamento, "
+            f"pior esticão {worst:g}x de {P.CHARACTER_MAX_EDGE_STRETCH:g}x"
+        )
+
+
 def _budget_key(part: dict) -> str:
     """Árvore tem teto próprio; o resto usa o teto da categoria."""
     if part["name"].startswith("tree_"):
@@ -288,6 +350,7 @@ def main() -> list[Path]:
     check_typing()
     check_params_integrity()
     check_kit_manifest()
+    check_character_manifest()
     check_repository()
 
     scanned = len(_gdscript_files())

@@ -35,6 +35,12 @@ from tools import params as P
 # Nome da camada inteira que carrega o índice de cor de cada face.
 PALETTE_LAYER = "palette"
 
+# Nome da camada inteira que carrega a *seção de corpo* de cada face — a que parte do
+# humanoide ela pertence. Fica aqui, e não em `gen_characters`, porque quem precisa
+# carregá-la intacta por triangulação, canonicalização e união é o BMesh; o kit
+# simplesmente deixa tudo em 0 e nunca lê de volta.
+SECTION_LAYER = "section"
+
 # Nome do atributo de cor da malha. O exportador de glTF e o nó do material precisam
 # concordar com este nome exato, senão o COLOR_0 sai vazio.
 COLOR_ATTRIBUTE = "Color"
@@ -61,9 +67,10 @@ CANONICAL_PRECISION = 6
 
 
 def new_bmesh() -> bmesh.types.BMesh:
-    """BMesh vazio já com a camada de paleta pronta."""
+    """BMesh vazio já com as camadas de paleta e de seção prontas."""
     bm = bmesh.new()
     bm.faces.layers.int.new(PALETTE_LAYER)
+    bm.faces.layers.int.new(SECTION_LAYER)
     return bm
 
 
@@ -78,6 +85,24 @@ def paint(bm: bmesh.types.BMesh, faces: Iterable[bmesh.types.BMFace], key: str) 
 def face_palette_key(bm: bmesh.types.BMesh, face: bmesh.types.BMFace) -> str:
     layer = bm.faces.layers.int[PALETTE_LAYER]
     return P.PALETTE_KEYS[face[layer]]
+
+
+def mark(bm: bmesh.types.BMesh, faces: Iterable[bmesh.types.BMFace], section: int) -> None:
+    """Carimba faces com o índice da seção de corpo a que pertencem.
+
+    É a metade "envelope" do skinning: dizer que estas faces são a coxa esquerda é
+    conhecimento que o construtor tem de graça e que nenhuma heurística de distância
+    recupera com segurança — sem isto, o peito fica perto demais do osso do braço e
+    acaba pendurado nele.
+    """
+    layer = bm.faces.layers.int[SECTION_LAYER]
+    for face in faces:
+        face[layer] = section
+
+
+def face_section(bm: bmesh.types.BMesh, face: bmesh.types.BMFace) -> int:
+    layer = bm.faces.layers.int[SECTION_LAYER]
+    return face[layer]
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +232,66 @@ def add_icosphere(
             bm, subdivisions=subdivisions, diameter=radius, matrix=matrix, calc_uvs=False
         )
     faces = [face for face in bm.faces if face not in before]
+    paint(bm, faces, key)
+    return faces
+
+
+def ring(
+    center: Sequence[float],
+    half_x: float,
+    half_y: float,
+    sides: int,
+    rotation: float = 0.0,
+) -> list[Vector]:
+    """Anel elíptico de `sides` pontos, no plano XY, à altura de `center`.
+
+    A ordem é sempre a mesma (ângulo crescente), o que deixa dois anéis costuráveis sem
+    torção — `add_loft` conta com isso.
+    """
+    cx, cy, cz = center
+    step = math.tau / sides
+    points = []
+    for index in range(sides):
+        angle = rotation + step * index
+        points.append(Vector((cx + math.cos(angle) * half_x, cy + math.sin(angle) * half_y, cz)))
+    return points
+
+
+def add_loft(
+    bm: bmesh.types.BMesh,
+    rings: Sequence[Sequence[Vector]],
+    key: str,
+    cap_start: bool = True,
+    cap_end: bool = True,
+) -> list[bmesh.types.BMFace]:
+    """Costura anéis consecutivos numa casca contínua.
+
+    É a base do corpo humanoide, e a razão de ele não ser um monte de caixas soltas:
+    numa malha contínua o anel da articulação tem vértices que podem repartir peso entre
+    dois ossos, e o cotovelo dobra em vez de quebrar. Caixas separadas nunca rasgam
+    porque nunca dobram — e é justamente a dobra que queremos.
+
+    Todos os anéis precisam ter a mesma contagem de pontos.
+    """
+    counts = {len(single) for single in rings}
+    if len(counts) != 1:
+        raise ValueError(f"anéis com contagens diferentes de pontos: {sorted(counts)}")
+
+    layers = [[bm.verts.new(point) for point in single] for single in rings]
+    sides = len(layers[0])
+    faces: list[bmesh.types.BMFace] = []
+
+    for index in range(len(layers) - 1):
+        lower, upper = layers[index], layers[index + 1]
+        for step in range(sides):
+            nxt = (step + 1) % sides
+            faces.append(bm.faces.new([lower[step], lower[nxt], upper[nxt], upper[step]]))
+
+    if cap_start:
+        faces.append(bm.faces.new(list(reversed(layers[0]))))
+    if cap_end:
+        faces.append(bm.faces.new(layers[-1]))
+
     paint(bm, faces, key)
     return faces
 
@@ -415,7 +500,7 @@ def transform(bm: bmesh.types.BMesh, matrix: Matrix,
     bmesh.ops.transform(bm, matrix=matrix, verts=list(bm.verts) if verts is None else list(verts))
 
 
-def canonicalize(bm: bmesh.types.BMesh) -> bmesh.types.BMesh:
+def canonicalize(bm: bmesh.types.BMesh, weld: bool = False) -> bmesh.types.BMesh:
     """Reconstrói a malha numa ordem que só depende da geometria. Devolve um BMesh novo.
 
     Sem isto o determinismo seria sorte. `bmesh.ops.bevel` — e vários outros ops — emitem
@@ -434,23 +519,48 @@ def canonicalize(bm: bmesh.types.BMesh) -> bmesh.types.BMesh:
     Chame **depois** de `inspect_normals`: a canonicalização separa os vértices por face
     (que é o que o shading flat quer de qualquer forma), e aí a malha deixa de parecer
     fechada para o teste de topologia.
+
+    `weld=True` mantém um vértice só por posição em vez de um por canto de face. O kit não
+    quer isso — vértice separado é o que dá a normal dura de face. Um humanoide rigado
+    quer: sem vértice compartilhado a malha não tem aresta entre triângulos, e aí o teste
+    de rasgo na pose de teste mede apenas as arestas *dentro* de cada triângulo, que nunca
+    rasgam. O shading continua flat porque a cor é por canto e `use_smooth` é False.
     """
     layer_source = bm.faces.layers.int[PALETTE_LAYER]
-    records: list[tuple[list, list, int]] = []
+    section_source = bm.faces.layers.int[SECTION_LAYER]
+    records: list[tuple[list, list, int, int]] = []
     for face in bm.faces:
         coords = [tuple(vert.co) for vert in face.verts]
         keys = [tuple(round(value, CANONICAL_PRECISION) for value in co) for co in coords]
         start = keys.index(min(keys))
         records.append((keys[start:] + keys[:start], coords[start:] + coords[:start],
-                        face[layer_source]))
-    records.sort(key=lambda record: (record[0], record[2]))
+                        face[layer_source], face[section_source]))
+    records.sort(key=lambda record: (record[0], record[2], record[3]))
 
     canonical = new_bmesh()
     layer_target = canonical.faces.layers.int[PALETTE_LAYER]
-    for _keys, coords, palette in records:
-        verts = [canonical.verts.new(Vector(co)) for co in coords]
-        new_face = canonical.faces.new(verts)
+    section_target = canonical.faces.layers.int[SECTION_LAYER]
+    shared: dict[tuple[float, ...], bmesh.types.BMVert] = {}
+
+    def vertex(key: tuple[float, ...], co: tuple[float, float, float]) -> bmesh.types.BMVert:
+        if not weld:
+            return canonical.verts.new(Vector(co))
+        existing = shared.get(key)
+        if existing is None:
+            existing = canonical.verts.new(Vector(co))
+            shared[key] = existing
+        return existing
+
+    for keys, coords, palette, section in records:
+        if weld and len(set(keys)) != len(keys):
+            continue  # face degenerada depois da soldagem: dois cantos na mesma posição
+        verts = [vertex(key, co) for key, co in zip(keys, coords)]
+        try:
+            new_face = canonical.faces.new(verts)
+        except ValueError:
+            continue  # face repetida sobre os mesmos vértices
         new_face[layer_target] = palette
+        new_face[section_target] = section
     canonical.normal_update()
     bm.free()
     return canonical
@@ -468,12 +578,15 @@ def merge_into(target: bmesh.types.BMesh, source: bmesh.types.BMesh,
     """
     layer_source = source.faces.layers.int[PALETTE_LAYER]
     layer_target = target.faces.layers.int[PALETTE_LAYER]
+    section_source = source.faces.layers.int[SECTION_LAYER]
+    section_target = target.faces.layers.int[SECTION_LAYER]
     source.verts.ensure_lookup_table()
     shift = Vector(offset)
     mapping = {vert.index: target.verts.new(vert.co + shift) for vert in source.verts}
     for face in source.faces:
         new_face = target.faces.new([mapping[vert.index] for vert in face.verts])
         new_face[layer_target] = face[layer_source]
+        new_face[section_target] = face[section_source]
     source.free()
 
 
