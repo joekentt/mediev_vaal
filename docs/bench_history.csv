@@ -1,0 +1,5 @@
+timestamp,scene,frames,fps_avg,fps_1pct_low,frame_ms_avg,frame_ms_worst,draw_calls,triangles,objects,physics_ms,process_ms,memory_mb,violations
+2026-08-07T22:26:32,res://scenes/world/main.tscn,240,6.16,5.46,162.354,184.615,5,800,5,0.061,167.644,29.5,1
+2026-08-07T22:27:19,res://scenes/world/main.tscn,240,5.97,5.35,167.596,187.055,5,800,5,0.059,172.377,29.5,1
+2026-08-07T22:30:36,res://scenes/world/main.tscn,240,5.58,2.85,179.250,375.476,5,800,5,0.061,190.879,29.5,1
+2026-08-12T21:37:23,res://scenes/world/main.tscn,240,6.01,5.06,166.408,200.550,5,800,5,0.060,172.982,29.5,1
