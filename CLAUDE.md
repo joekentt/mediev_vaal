@@ -25,12 +25,14 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `assets/generated/kit/*.glb` + manifesto | `tools/gen_assets.py` (Blender) | `tools/params.py` |
 | `assets/generated/characters/*.glb` + manifesto | `tools/gen_characters.py` (Blender) | `tools/params.py` |
 | `assets/generated/audio/*` | `tools/gen_audio.py` | `tools/params.py` |
+| `resources/gaits/*.tres` | `tools/gen_gaits.py` | `tools/params.py` |
 | `scenes/world/main.tscn` | `tools/gen_world.py` | `tools/params.py` |
 | Céu, sol, chão, colisão, câmera | `generators/world_generator.gd` | `Params` |
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
 | `docs/assets.html` + renders | `tools/preview_assets.py` + `tools/contact_sheet.py` | manifesto do kit |
 | `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
 | `docs/bench.json` + histórico | `tools/bench.gd` | `Params.BENCH_ROUTE` |
+| `docs/anim/*.png` | `tools/anim_preview.gd` | `Params.GAIT_PROFILES` |
 
 Consequências práticas:
 
@@ -60,6 +62,7 @@ make all      regenera tudo e verifica            (não precisa do Godot)
 make params   scripts/core/params.gd
 make project  project.godot
 make materials  biblioteca de materiais do Godot
+make gaits    perfis de marcha em resources/gaits/
 make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
 make test-assets prova determinismo, paleta, orçamento e rig (precisa do Blender)
 make characters 7 humanoides rigados em .glb + manifesto    (precisa do Blender)
@@ -68,6 +71,7 @@ make world    cenas e manifesto do mundo
 make verify   cobra a regra inegociável
 make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)
 make preview  renders do kit + docs/assets.html + capturas da cena
+make anim     tiras de quadros da locomoção em docs/anim/  (precisa do Godot)
 make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
@@ -86,7 +90,8 @@ make assets PARTS="wall barrel"       # só as peças citadas, para iterar rápi
 make characters WHO="guarda anciao"   # idem, para os corpos
 ```
 
-`make preview` e `make bench` acham o Godot pelo `PATH` ou pela variável `GODOT`:
+`make preview`, `make anim` e `make bench` acham o Godot pelo `PATH` ou pela variável
+`GODOT`:
 
 ```
 GODOT=/opt/godot/godot4 make preview
@@ -94,7 +99,7 @@ GODOT=/opt/godot/godot4 make preview
 
 Os dois **precisam de um display** — e note que `--headless` no Godot não significa "sem
 janela", significa *sem renderizador*: com ela, captura de tela vem preta e draw call vem
-zero. Por isso `preview` e `bench` chamam o Godot **sem** `--headless` e recusam rodar se
+zero. Por isso `preview`, `anim` e `bench` chamam o Godot **sem** `--headless` e recusam rodar se
 não houver renderizador, em vez de gravar números falsos no histórico. Numa sessão gráfica
 funcionam direto; em CI, envolva com um display virtual:
 
@@ -153,6 +158,35 @@ produz alguém baixo, e não uma miniatura de alguém alto.
   e `<nome>_pose.glb` é prova — a mesma malha já deformada na pose de teste. É a
   geometria que o catálogo mostra e que o teste de rasgo mede.
 
+### Locomoção
+
+**Não há animação autoral neste projeto.** Nenhum `.anim`, nenhuma curva capturada,
+nenhum clipe. O movimento nasce em runtime, de IK de duas juntas e de senos, em
+`scripts/gameplay/procedural_locomotion.gd`. É escolha estética, não economia: uma malha
+de 470 triângulos com silhueta dura não pede a sutileza de uma curva, pede leitura clara
+a 10 m — e em troca a passada responde à velocidade real e o pé encontra o degrau que o
+terreno procedural acabou de gerar.
+
+- **O pé não é animado, é pregado.** Durante o apoio ele fica numa posição *de mundo*
+  fixa e o corpo passa por ela; só no balanço viaja até o próximo apoio, escolhido por
+  raycast no relevo. Deslizamento não é um defeito a combater com tuning: aqui é
+  impossível por construção.
+- **A cadência sai da velocidade**, pela igualdade `cadência = velocidade / (2 · passo)`.
+  Um ciclo com relógio próprio patina no chão assim que o personagem acelera.
+- **Camadas somam, não substituem**: quadril → coluna → pernas (IK) → braços → cabeça →
+  respiração e olhar. Respiração some quando o corpo anda; o bob de câmera só existe
+  correndo, e o nó apenas *publica* o deslocamento — quem move a câmera é quem tem uma.
+- **Marcha é dado, não código.** `resources/gaits/*.tres` traz um `GaitProfile` por
+  postura, e a postura já vem do corpo. Não existe `if raca == ...` em lugar nenhum:
+  trocar o `.tres` troca a marcha.
+- **Todo parâmetro é `@export`**, para tunar com o jogo rodando. O valor de fábrica sai
+  de `Params`; o inspetor ajusta, mas quem manda no que nasce é o gerador.
+
+`make anim` prova as duas coisas que só se veem olhando: grava tiras de quadros em
+`docs/anim/` e **mede** o desvio do pé apoiado, reprovando o build acima de
+`ANIM_FOOT_SLIDE_LIMIT`. A tira `marchas.png` põe três posturas lado a lado — se as três
+silhuetas saírem iguais, o perfil não está chegando ao corpo.
+
 `make characters` reprova o build quando um corpo estoura `TRI_BUDGET["npc"]`, quando um
 vértice ganha mais de `BONE_MAX_INFLUENCES` ossos, ou quando uma aresta estica acima de
 `CHARACTER_MAX_EDGE_STRETCH` na pose de teste — que é a forma executável de "nenhum
@@ -171,6 +205,9 @@ chegou à malha.
   meshlib.py        helpers de malha no Blender: primitivas, chanfro, ruído, cor
   kit_*.py          as 34 peças paramétricas (arquitetura, props, natureza)
   gen_characters.py humanoides rigados: corpo, esqueleto Mixamo, skinning e prova de pose
+  gen_gaits.py      perfis de marcha por postura, em resources/gaits/
+  anim_preview.gd   tiras de quadros da locomoção + medida de deslizamento (Godot)
+  anim.py           roda anim_preview.gd e reprova o build se o pé patinar
   test_assets.py    prova determinismo, paleta, orçamento e rig
   verify.py         cobra a regra inegociável
   preview_assets.py renderiza cada peça em 4 ângulos, com figura de escala (Blender)
@@ -187,14 +224,19 @@ chegou à malha.
 /scripts
   core/             autoloads, Params gerado, métricas, harness de medição
   gameplay/         regras de jogo
+    procedural_locomotion.gd  marcha, corrida, salto e camadas aditivas por IK
+    two_bone_ik.gd            solver analítico de duas juntas
+    gait_profile.gd           Resource de marcha, um por postura
   ai/               comportamento de NPC
   ui/               telas e widgets
 /resources          dados de design gerados (raças, diálogos, itens), versionados
+  gaits/            perfis de marcha por postura (gerado, versionado)
 /assets/generated   DERIVADO — no .gitignore, volta com `make all`
   kit/              as 34 peças em .glb + manifest.json
   characters/       os 7 humanoides em .glb com esqueleto + manifest.json
 /docs               documentação do pipeline
   assets.html       catálogo visual do kit (derivado)
+  anim/             tiras de quadros da locomoção (derivado)
   bench_history.csv VERSIONADO: uma linha por execução de `make bench`
 ```
 
@@ -375,9 +417,13 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    `TimeSystem` passa a mover o sol, a cor do céu e a névoa. Iluminação por período,
    sem custo por frame além da interpolação.
 
-6. **Jogador e câmera**
-   `CharacterBody3D` gerado, caminhar/correr/pular, câmera de terceira pessoa com
-   colisão contra o cenário, captura de mouse.
+6. **Jogador e câmera** — *animação adiantada*
+   A **locomoção** já existe: `scripts/gameplay/procedural_locomotion.gd` faz marcha,
+   corrida, salto, sentar, carregar, interagir e as camadas aditivas por IK, fora de
+   ordem e a pedido explícito. O que resta desta fase é o controle: `CharacterBody3D`
+   gerado, entrada de teclado e gamepad, câmera de terceira pessoa com colisão contra o
+   cenário e captura de mouse. O nó de locomoção já publica o `camera_offset` que essa
+   câmera vai somar.
 
 7. **Kit modular de arquitetura**
    Paredes, portas, janelas, telhados e escadas gerados no grid de 2 m. Prédios montados
@@ -426,6 +472,12 @@ neste projeto e foram encontradas *olhando*, não lendo log.
 - `docs/assets.html` com as 34 peças em quatro ângulos e uma figura de 1,75 m ao lado,
   para o tamanho significar alguma coisa;
 - `docs/shots/*.png` com a cena de verdade, dos pontos de câmera nomeados.
+
+`make anim` responde "move certo?":
+
+- `docs/anim/*.png` com o ciclo de caminhada, corrida e salto quadro a quadro;
+- o desvio do pé apoiado em metros, que é o critério "o pé não desliza" em número;
+- `docs/anim/marchas.png`, com três posturas andando lado a lado.
 
 `make bench` responde "cabe?":
 

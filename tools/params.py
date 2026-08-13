@@ -453,6 +453,184 @@ CHARACTER_ROSTER: tuple[dict, ...] = (
 )
 
 # ---------------------------------------------------------------------------
+# Locomoção procedural
+# ---------------------------------------------------------------------------
+# Não haverá animação autoral neste projeto. O movimento nasce em runtime, de IK de duas
+# juntas e de senos — que é a escolha estética coerente com o resto: uma malha de 470
+# triângulos com silhueta dura não pede interpolação sutil de curva, pede leitura clara a
+# 10 m de distância.
+#
+# O que separa isto de "tocar um clipe" é que **a fase do passo é função da velocidade
+# real**, e não de um relógio. Um ciclo com relógio próprio patina no chão assim que a
+# velocidade muda; aqui o pé fica cravado numa posição de mundo durante o apoio e a
+# passada é o que se ajusta. Escorregar deixa de ser um bug para virar impossível por
+# construção.
+
+GAIT_DIR = "resources/gaits"
+
+# Abaixo deste módulo de velocidade o personagem está parado, não andando devagar.
+GAIT_MOVE_THRESHOLD = 0.06        # m/s
+# Velocidade em que a marcha vira corrida. Não muda o código, só a mistura de amplitudes.
+GAIT_RUN_SPEED = 2.9              # m/s
+# Comprimento de passo como fração da altura do quadril, e como ele cresce com a
+# velocidade. Passo curto e cadência alta parece nervoso; o contrário parece flutuar.
+GAIT_STRIDE_HIP_FACTOR = 0.62
+GAIT_STRIDE_SPEED_FACTOR = 0.22   # metros de passada extra por m/s
+GAIT_STRIDE_MIN = 0.28            # m
+GAIT_STRIDE_MAX = 2.10            # m
+# Fração do ciclo em que um pé está no chão. 0,5 é corrida (há instante sem apoio);
+# acima disso é caminhada, com os dois pés no chão na transição.
+GAIT_DUTY_WALK = 0.62
+GAIT_DUTY_RUN = 0.46
+# Suavização da velocidade medida e do desaparecimento do ciclo ao parar, em 1/s.
+GAIT_SPEED_SMOOTHING = 9.0
+GAIT_BLEND_SPEED = 5.0
+# Alcance do raycast de apoio, para cima e para baixo a partir do pé previsto.
+GAIT_GROUND_PROBE_UP = 0.9        # m
+GAIT_GROUND_PROBE_DOWN = 2.2      # m
+# Quanto o tornozelo fica acima do ponto de contato. É a espessura do pé.
+GAIT_ANKLE_HEIGHT = 0.055         # fração da altura do personagem
+
+# Perfil de marcha por postura. A postura já existe no elenco — é o parâmetro por povo
+# que faz um guarda erguido e um batedor ágil andarem diferente **sem uma linha de código
+# específica**: o mesmo nó lê outro perfil. Ângulos em graus, alturas em fração da altura
+# do personagem, tempos em segundos.
+GAIT_PROFILES: dict[str, dict[str, float]] = {
+    "ereto": {
+        "stride_scale":     1.00,
+        "cadence_scale":    1.00,
+        "foot_lift":        0.075,
+        "foot_lift_run":    0.135,
+        "hip_bounce":       0.016,
+        "hip_sway_deg":     4.0,
+        "hip_drop_deg":     3.5,
+        "torso_lean_deg":   3.0,
+        "torso_twist_deg":  5.0,
+        "arm_swing_deg":    26.0,
+        "arm_bias_deg":     2.0,
+        "elbow_bend_deg":   14.0,
+        "head_bob":         0.008,
+        "knee_forward":     1.0,
+    },
+    "curvado": {
+        "stride_scale":     0.78,
+        "cadence_scale":    0.88,
+        "foot_lift":        0.045,
+        "foot_lift_run":    0.080,
+        "hip_bounce":       0.010,
+        "hip_sway_deg":     2.5,
+        "hip_drop_deg":     5.0,
+        "torso_lean_deg":   9.0,
+        "torso_twist_deg":  2.5,
+        "arm_swing_deg":    14.0,
+        "arm_bias_deg":     16.0,
+        "elbow_bend_deg":   30.0,
+        "head_bob":         0.012,
+        "knee_forward":     0.85,
+    },
+    "agil": {
+        "stride_scale":     1.18,
+        "cadence_scale":    1.12,
+        "foot_lift":        0.105,
+        "foot_lift_run":    0.185,
+        "hip_bounce":       0.024,
+        "hip_sway_deg":     6.5,
+        "hip_drop_deg":     2.5,
+        "torso_lean_deg":   6.0,
+        "torso_twist_deg":  9.0,
+        "arm_swing_deg":    38.0,
+        "arm_bias_deg":     -3.0,
+        "elbow_bend_deg":   22.0,
+        "head_bob":         0.014,
+        "knee_forward":     1.15,
+    },
+}
+
+# Braços nascem em T-pose e precisam descer antes de qualquer coisa. Este é o ângulo do
+# ombro entre a T e o braço ao longo do corpo — sem ele o personagem andaria de braços
+# abertos, que é a pose do arquivo, não a do jogo.
+ARM_REST_DROP_DEG = 76.0
+ARM_OUTWARD_DEG = 7.0             # afasta o braço do tronco, para não atravessar a roupa
+FOOT_SWING_TILT_DEG = 14.0        # ponta do pé sobe no balanço
+JUMP_TUCK_LEG_FACTOR = 0.62       # fração do comprimento da perna com o joelho recolhido
+SIT_FOOT_FORWARD = 0.24           # fração da altura: onde os pés ficam ao sentar
+
+# --- Camadas aditivas --------------------------------------------------------
+# Somam sobre a locomoção em vez de substituí-la. Respiração some quando o corpo anda
+# (quem anda já sobe e desce), o olhar não; o bob de câmera só existe correndo.
+BREATH_FREQUENCY = 0.24           # Hz — cerca de 14 respirações por minuto
+BREATH_CHEST_DEG = 1.6
+BREATH_RISE = 0.006               # fração da altura
+LOOK_MAX_HEAD_YAW_DEG = 62.0      # além disto o tronco vira junto
+LOOK_MAX_HEAD_PITCH_DEG = 34.0
+LOOK_TORSO_SHARE = 0.55           # quanto do excesso de guinada vai para o tronco
+LOOK_SMOOTHING = 7.0              # 1/s
+CAMERA_BOB_AMPLITUDE = 0.028      # m, no pico da corrida
+CAMERA_BOB_SIDE = 0.014           # m
+CAMERA_BOB_HARMONIC = 2.0         # a cabeça sobe duas vezes por ciclo, uma por pé
+
+# --- Estados extras ----------------------------------------------------------
+# O pulo é quatro fases, e cada uma tem uma leitura própria: agachar carrega, impulso
+# estende, recolher tira as pernas do caminho, aterrissar absorve. Sem a fase de agachar
+# o salto parece teletransporte.
+JUMP_CROUCH_TIME = 0.13           # s
+JUMP_CROUCH_DEPTH = 0.14          # fração da altura
+JUMP_LAUNCH_TIME = 0.11
+JUMP_LAUNCH_RISE = 0.05
+JUMP_TUCK_DEG = 48.0              # joelho recolhido no ar
+JUMP_LAND_TIME = 0.26
+JUMP_LAND_DEPTH = 0.17
+INTERACT_REACH_TIME = 0.22        # s para o braço chegar ao alvo
+INTERACT_HOLD_TIME = 0.35
+INTERACT_RETURN_TIME = 0.30
+SIT_HIP_DROP = 0.26               # fração da altura
+SIT_HIP_TIME = 0.4                # s de transição
+SIT_KNEE_DEG = 84.0
+SIT_TORSO_DEG = 6.0
+CARRY_ARM_DEG = 62.0              # braços à frente
+CARRY_ELBOW_DEG = 74.0
+CARRY_TORSO_LEAN_DEG = -4.0       # peso na frente pede tronco para trás
+CARRY_BLEND_TIME = 0.35
+
+# --- Prova visual da locomoção ----------------------------------------------
+ANIM_DIR = "docs/anim"
+ANIM_FRAME_WIDTH = 300
+ANIM_FRAME_HEIGHT = 460
+ANIM_STRIP_COLUMNS = 8            # quadros por tira
+ANIM_STEP_FRAMES = 7              # quadros de simulação entre dois quadros gravados
+ANIM_SETTLE_FRAMES = 6            # quadros descartados no começo, até a marcha engatar
+ANIM_CAMERA_FOV = 34.0
+ANIM_CAMERA_HEIGHT = 0.62         # fração da altura do personagem
+ANIM_CAMERA_DISTANCE = 4.4        # m
+# De lado, e do lado *iluminado*. O sol do estágio vem de -X: enquadrar de +X, que foi a
+# primeira escolha, deu oito silhuetas pretas contra o céu — legíveis como silhueta e
+# inúteis para ver joelho, cotovelo e pé.
+ANIM_CAMERA_YAW_DEG = 200.0
+ANIM_WALK_SPEED = 1.5             # m/s
+ANIM_RUN_SPEED = 4.2              # m/s
+ANIM_JUMP_SPEED = 1.2             # m/s de avanço durante o salto
+ANIM_FOOT_SLIDE_LIMIT = 0.02      # m — acima disto o pé patina e a prova reprova
+# Personagem de cada tira, e as duas posturas que a tira comparativa põe lado a lado.
+ANIM_SUBJECT = "aldeao"
+# Altura assumida quando não há um corpo medido para enquadrar. Só o caminho de erro.
+PREVIEW_FIGURE_HEIGHT_FALLBACK = 1.75
+ANIM_GAIT_COMPARISON = ("guarda", "batedor", "anciao")
+# Fase em que a tira comparativa congela os três corpos. 0,5 é onde as pernas estão mais
+# abertas — um pé acabou de pousar à frente e o outro está prestes a sair de trás. Parar
+# no mesmo *quadro* não serviria: cadências diferentes põem cada um numa fase diferente,
+# e a comparação mediria o relógio em vez da marcha.
+ANIM_COMPARISON_PHASE = 0.5
+# Quadros de simulação que cada estado extra recebe antes de ser fotografado. Sentar e
+# carregar têm transição contínua; fotografar no primeiro quadro pegaria o meio dela.
+ANIM_STATE_FRAMES = 40
+# Onde o braço vai buscar, na tira de estados: à frente, na altura do peito, do lado
+# direito. Em fração da altura do personagem.
+ANIM_INTERACT_REACH = (0.22, 0.72, -0.34)
+# Para onde a cabeça olha na tira de estados. Bem para o lado, de propósito: é o caso em
+# que o pescoço estoura o limite e o tronco tem de virar junto.
+ANIM_LOOK_AT = (-2.4, 1.5, 1.2)
+
+# ---------------------------------------------------------------------------
 # Olhos: renderização de catálogo e capturas
 # ---------------------------------------------------------------------------
 # Esta fase existe porque quem escreve o gerador não vê o que ele gera.

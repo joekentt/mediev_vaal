@@ -24,7 +24,7 @@ import json
 import re
 from pathlib import Path
 
-from . import gen_audio, gen_materials, gen_params, gen_project, gen_world
+from . import gen_audio, gen_gaits, gen_materials, gen_params, gen_project, gen_world
 from . import params as P
 from .util import ROOT
 
@@ -40,6 +40,11 @@ GDSCRIPT_DIRS = ("scripts", "generators", "tools")
 MAGIC_NUMBER_EXEMPT = {Path("scripts/core/params.gd")}
 
 _STRING_RE = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
+# Argumentos de anotação — `@export_range(0.0, 2.0, 0.01)`, `@export_flags(...)`. São
+# metadados do inspetor: mínimo, máximo e passo do slider, não valores que o jogo lê. O
+# *valor padrão* da propriedade continua sendo cobrado, que é o número que importa: ele
+# tem de vir de `Params`, ou ser trivial e preenchido no `_init`.
+_ANNOTATION_ARGS_RE = re.compile(r"(@\w+)\([^)]*\)")
 _NUMBER_RE = re.compile(r"(?<![\w.])-?\d+(?:_\d+)*(?:\.\d+)?(?![\w.])")
 _CONST_RE = re.compile(r"^\s*(?:@\w+(?:\([^)]*\))?\s+)?const\s")
 _ENUM_RE = re.compile(r"^\s*enum\s")
@@ -70,6 +75,9 @@ def check_drift() -> None:
     for name, (color_key, roughness, metallic) in P.MATERIALS.items():
         target = gen_materials.OUTPUT_DIR / f"{name}.tres"
         expected[target] = gen_materials._material_resource(name, color_key, roughness, metallic)
+    for posture, values in P.GAIT_PROFILES.items():
+        target = gen_gaits.OUTPUT_DIR / f"{posture}.tres"
+        expected[target] = gen_gaits._profile_resource(posture, values)
     expected[gen_audio.BUS_LAYOUT_OUTPUT] = gen_audio._bus_layout()
 
     for relative, content in expected.items():
@@ -89,8 +97,9 @@ def check_drift() -> None:
 
 
 def _strip_noise(line: str) -> str:
-    """Remove strings e comentários — número dentro deles não é número mágico."""
+    """Remove strings, comentários e argumentos de anotação do inspetor."""
     line = _STRING_RE.sub('""', line)
+    line = _ANNOTATION_ARGS_RE.sub(r"\1", line)
     hash_index = line.find("#")
     return line[:hash_index] if hash_index >= 0 else line
 

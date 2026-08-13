@@ -72,6 +72,25 @@ def _vec3(values) -> str:
     return f"Vector3({P.num(x)}, {P.num(y)}, {P.num(z)})"
 
 
+def _gait_profiles() -> str:
+    """Perfis de marcha como dicionário aninhado, uma linha por campo."""
+    lines = []
+    for posture, profile in P.GAIT_PROFILES.items():
+        lines.append(f'\t&"{posture}": {{')
+        width = max(len(field) for field in profile)
+        for field, value in profile.items():
+            key = f'&"{field}":'.ljust(width + 5)
+            # Float explícito, e não `P.num`: um `1` cru aqui entra no dicionário como
+            # int, e a primeira divisão por ele vira divisão inteira sem avisar.
+            lines.append(f"\t\t{key} {float(value)!r},")
+        lines.append("\t},")
+    return "\n".join(lines)
+
+
+def _anim_comparison() -> str:
+    return ", ".join(f'"{name}"' for name in P.ANIM_GAIT_COMPARISON)
+
+
 def _period_enum() -> str:
     return ", ".join(P.period_names())
 
@@ -211,6 +230,97 @@ const WORLD_SEED: int = {P.WORLD_SEED}
 const BENCH_WARMUP_FRAMES: int = {P.BENCH_WARMUP_FRAMES}
 const BENCH_SAMPLE_FRAMES: int = {P.BENCH_SAMPLE_FRAMES}
 const SCREENSHOT_WAIT_FRAMES: int = {P.SCREENSHOT_WAIT_FRAMES}
+
+# --- Locomoção procedural ----------------------------------------------------
+
+## Perfis de marcha gerados em `resources/gaits/`, um por postura.
+const GAIT_DIR: String = "res://{P.GAIT_DIR}"
+
+const GAIT_MOVE_THRESHOLD: float = {P.num(P.GAIT_MOVE_THRESHOLD)}
+const GAIT_RUN_SPEED: float = {P.num(P.GAIT_RUN_SPEED)}
+const GAIT_STRIDE_HIP_FACTOR: float = {P.num(P.GAIT_STRIDE_HIP_FACTOR)}
+const GAIT_STRIDE_SPEED_FACTOR: float = {P.num(P.GAIT_STRIDE_SPEED_FACTOR)}
+const GAIT_STRIDE_MIN: float = {P.num(P.GAIT_STRIDE_MIN)}
+const GAIT_STRIDE_MAX: float = {P.num(P.GAIT_STRIDE_MAX)}
+const GAIT_DUTY_WALK: float = {P.num(P.GAIT_DUTY_WALK)}
+const GAIT_DUTY_RUN: float = {P.num(P.GAIT_DUTY_RUN)}
+const GAIT_SPEED_SMOOTHING: float = {P.num(P.GAIT_SPEED_SMOOTHING)}
+const GAIT_BLEND_SPEED: float = {P.num(P.GAIT_BLEND_SPEED)}
+const GAIT_GROUND_PROBE_UP: float = {P.num(P.GAIT_GROUND_PROBE_UP)}
+const GAIT_GROUND_PROBE_DOWN: float = {P.num(P.GAIT_GROUND_PROBE_DOWN)}
+const GAIT_ANKLE_HEIGHT: float = {P.num(P.GAIT_ANKLE_HEIGHT)}
+
+## Perfil de marcha por postura. É o parâmetro por povo que faz corpos diferentes
+## andarem diferente sem uma linha de código específica: o mesmo nó lê outro perfil.
+const GAIT_PROFILES: Dictionary = {{
+{_gait_profiles()}
+}}
+
+const ARM_REST_DROP_DEG: float = {P.num(P.ARM_REST_DROP_DEG)}
+const ARM_OUTWARD_DEG: float = {P.num(P.ARM_OUTWARD_DEG)}
+const FOOT_SWING_TILT_DEG: float = {P.num(P.FOOT_SWING_TILT_DEG)}
+const JUMP_TUCK_LEG_FACTOR: float = {P.num(P.JUMP_TUCK_LEG_FACTOR)}
+const SIT_FOOT_FORWARD: float = {P.num(P.SIT_FOOT_FORWARD)}
+
+# --- Camadas aditivas --------------------------------------------------------
+
+const BREATH_FREQUENCY: float = {P.num(P.BREATH_FREQUENCY)}
+const BREATH_CHEST_DEG: float = {P.num(P.BREATH_CHEST_DEG)}
+const BREATH_RISE: float = {P.num(P.BREATH_RISE)}
+const LOOK_MAX_HEAD_YAW_DEG: float = {P.num(P.LOOK_MAX_HEAD_YAW_DEG)}
+const LOOK_MAX_HEAD_PITCH_DEG: float = {P.num(P.LOOK_MAX_HEAD_PITCH_DEG)}
+const LOOK_TORSO_SHARE: float = {P.num(P.LOOK_TORSO_SHARE)}
+const LOOK_SMOOTHING: float = {P.num(P.LOOK_SMOOTHING)}
+const CAMERA_BOB_AMPLITUDE: float = {P.num(P.CAMERA_BOB_AMPLITUDE)}
+const CAMERA_BOB_SIDE: float = {P.num(P.CAMERA_BOB_SIDE)}
+const CAMERA_BOB_HARMONIC: float = {P.num(P.CAMERA_BOB_HARMONIC)}
+
+# --- Estados extras ----------------------------------------------------------
+
+const JUMP_CROUCH_TIME: float = {P.num(P.JUMP_CROUCH_TIME)}
+const JUMP_CROUCH_DEPTH: float = {P.num(P.JUMP_CROUCH_DEPTH)}
+const JUMP_LAUNCH_TIME: float = {P.num(P.JUMP_LAUNCH_TIME)}
+const JUMP_LAUNCH_RISE: float = {P.num(P.JUMP_LAUNCH_RISE)}
+const JUMP_TUCK_DEG: float = {P.num(P.JUMP_TUCK_DEG)}
+const JUMP_LAND_TIME: float = {P.num(P.JUMP_LAND_TIME)}
+const JUMP_LAND_DEPTH: float = {P.num(P.JUMP_LAND_DEPTH)}
+const INTERACT_REACH_TIME: float = {P.num(P.INTERACT_REACH_TIME)}
+const INTERACT_HOLD_TIME: float = {P.num(P.INTERACT_HOLD_TIME)}
+const INTERACT_RETURN_TIME: float = {P.num(P.INTERACT_RETURN_TIME)}
+const SIT_HIP_DROP: float = {P.num(P.SIT_HIP_DROP)}
+const SIT_HIP_TIME: float = {P.num(P.SIT_HIP_TIME)}
+const SIT_KNEE_DEG: float = {P.num(P.SIT_KNEE_DEG)}
+const SIT_TORSO_DEG: float = {P.num(P.SIT_TORSO_DEG)}
+const CARRY_ARM_DEG: float = {P.num(P.CARRY_ARM_DEG)}
+const CARRY_ELBOW_DEG: float = {P.num(P.CARRY_ELBOW_DEG)}
+const CARRY_TORSO_LEAN_DEG: float = {P.num(P.CARRY_TORSO_LEAN_DEG)}
+const CARRY_BLEND_TIME: float = {P.num(P.CARRY_BLEND_TIME)}
+
+# --- Prova visual da locomoção -----------------------------------------------
+
+## Tiras de quadros de `tools/anim_preview.gd`. Derivado: está no .gitignore.
+const ANIM_DIR: String = "res://{P.ANIM_DIR}"
+const ANIM_FRAME_WIDTH: int = {P.ANIM_FRAME_WIDTH}
+const ANIM_FRAME_HEIGHT: int = {P.ANIM_FRAME_HEIGHT}
+const ANIM_STRIP_COLUMNS: int = {P.ANIM_STRIP_COLUMNS}
+const ANIM_STEP_FRAMES: int = {P.ANIM_STEP_FRAMES}
+const ANIM_SETTLE_FRAMES: int = {P.ANIM_SETTLE_FRAMES}
+const ANIM_CAMERA_FOV: float = {P.num(P.ANIM_CAMERA_FOV)}
+const ANIM_CAMERA_HEIGHT: float = {P.num(P.ANIM_CAMERA_HEIGHT)}
+const ANIM_CAMERA_DISTANCE: float = {P.num(P.ANIM_CAMERA_DISTANCE)}
+const ANIM_CAMERA_YAW_DEG: float = {P.num(P.ANIM_CAMERA_YAW_DEG)}
+const ANIM_WALK_SPEED: float = {P.num(P.ANIM_WALK_SPEED)}
+const ANIM_RUN_SPEED: float = {P.num(P.ANIM_RUN_SPEED)}
+const ANIM_JUMP_SPEED: float = {P.num(P.ANIM_JUMP_SPEED)}
+const ANIM_FOOT_SLIDE_LIMIT: float = {P.num(P.ANIM_FOOT_SLIDE_LIMIT)}
+const ANIM_SUBJECT: String = "{P.ANIM_SUBJECT}"
+const PREVIEW_FIGURE_HEIGHT_FALLBACK: float = {P.num(P.PREVIEW_FIGURE_HEIGHT_FALLBACK)}
+const ANIM_GAIT_COMPARISON: Array[String] = [{_anim_comparison()}]
+const ANIM_COMPARISON_PHASE: float = {P.num(P.ANIM_COMPARISON_PHASE)}
+const ANIM_STATE_FRAMES: int = {P.ANIM_STATE_FRAMES}
+const ANIM_INTERACT_REACH: Vector3 = {_vec3(P.ANIM_INTERACT_REACH)}
+const ANIM_LOOK_AT: Vector3 = {_vec3(P.ANIM_LOOK_AT)}
+const CHARACTER_DIR: String = "res://{P.CHARACTER_DIR}"
 
 # --- Olhos: capturas e benchmark ---------------------------------------------
 

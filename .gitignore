@@ -13,6 +13,7 @@
 /docs/assets/
 /docs/assets.html
 /docs/shots/
+/docs/anim/
 /docs/bench.json
 
 # O Godot importa .csv como arquivo de tradução e cospe um .translation por coluna.

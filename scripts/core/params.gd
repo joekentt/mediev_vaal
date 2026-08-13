@@ -203,6 +203,144 @@ const BENCH_WARMUP_FRAMES: int = 30
 const BENCH_SAMPLE_FRAMES: int = 240
 const SCREENSHOT_WAIT_FRAMES: int = 10
 
+# --- Locomoção procedural ----------------------------------------------------
+
+## Perfis de marcha gerados em `resources/gaits/`, um por postura.
+const GAIT_DIR: String = "res://resources/gaits"
+
+const GAIT_MOVE_THRESHOLD: float = 0.06
+const GAIT_RUN_SPEED: float = 2.9
+const GAIT_STRIDE_HIP_FACTOR: float = 0.62
+const GAIT_STRIDE_SPEED_FACTOR: float = 0.22
+const GAIT_STRIDE_MIN: float = 0.28
+const GAIT_STRIDE_MAX: float = 2.1
+const GAIT_DUTY_WALK: float = 0.62
+const GAIT_DUTY_RUN: float = 0.46
+const GAIT_SPEED_SMOOTHING: float = 9
+const GAIT_BLEND_SPEED: float = 5
+const GAIT_GROUND_PROBE_UP: float = 0.9
+const GAIT_GROUND_PROBE_DOWN: float = 2.2
+const GAIT_ANKLE_HEIGHT: float = 0.055
+
+## Perfil de marcha por postura. É o parâmetro por povo que faz corpos diferentes
+## andarem diferente sem uma linha de código específica: o mesmo nó lê outro perfil.
+const GAIT_PROFILES: Dictionary = {
+	&"ereto": {
+		&"stride_scale":     1.0,
+		&"cadence_scale":    1.0,
+		&"foot_lift":        0.075,
+		&"foot_lift_run":    0.135,
+		&"hip_bounce":       0.016,
+		&"hip_sway_deg":     4.0,
+		&"hip_drop_deg":     3.5,
+		&"torso_lean_deg":   3.0,
+		&"torso_twist_deg":  5.0,
+		&"arm_swing_deg":    26.0,
+		&"arm_bias_deg":     2.0,
+		&"elbow_bend_deg":   14.0,
+		&"head_bob":         0.008,
+		&"knee_forward":     1.0,
+	},
+	&"curvado": {
+		&"stride_scale":     0.78,
+		&"cadence_scale":    0.88,
+		&"foot_lift":        0.045,
+		&"foot_lift_run":    0.08,
+		&"hip_bounce":       0.01,
+		&"hip_sway_deg":     2.5,
+		&"hip_drop_deg":     5.0,
+		&"torso_lean_deg":   9.0,
+		&"torso_twist_deg":  2.5,
+		&"arm_swing_deg":    14.0,
+		&"arm_bias_deg":     16.0,
+		&"elbow_bend_deg":   30.0,
+		&"head_bob":         0.012,
+		&"knee_forward":     0.85,
+	},
+	&"agil": {
+		&"stride_scale":     1.18,
+		&"cadence_scale":    1.12,
+		&"foot_lift":        0.105,
+		&"foot_lift_run":    0.185,
+		&"hip_bounce":       0.024,
+		&"hip_sway_deg":     6.5,
+		&"hip_drop_deg":     2.5,
+		&"torso_lean_deg":   6.0,
+		&"torso_twist_deg":  9.0,
+		&"arm_swing_deg":    38.0,
+		&"arm_bias_deg":     -3.0,
+		&"elbow_bend_deg":   22.0,
+		&"head_bob":         0.014,
+		&"knee_forward":     1.15,
+	},
+}
+
+const ARM_REST_DROP_DEG: float = 76
+const ARM_OUTWARD_DEG: float = 7
+const FOOT_SWING_TILT_DEG: float = 14
+const JUMP_TUCK_LEG_FACTOR: float = 0.62
+const SIT_FOOT_FORWARD: float = 0.24
+
+# --- Camadas aditivas --------------------------------------------------------
+
+const BREATH_FREQUENCY: float = 0.24
+const BREATH_CHEST_DEG: float = 1.6
+const BREATH_RISE: float = 0.006
+const LOOK_MAX_HEAD_YAW_DEG: float = 62
+const LOOK_MAX_HEAD_PITCH_DEG: float = 34
+const LOOK_TORSO_SHARE: float = 0.55
+const LOOK_SMOOTHING: float = 7
+const CAMERA_BOB_AMPLITUDE: float = 0.028
+const CAMERA_BOB_SIDE: float = 0.014
+const CAMERA_BOB_HARMONIC: float = 2
+
+# --- Estados extras ----------------------------------------------------------
+
+const JUMP_CROUCH_TIME: float = 0.13
+const JUMP_CROUCH_DEPTH: float = 0.14
+const JUMP_LAUNCH_TIME: float = 0.11
+const JUMP_LAUNCH_RISE: float = 0.05
+const JUMP_TUCK_DEG: float = 48
+const JUMP_LAND_TIME: float = 0.26
+const JUMP_LAND_DEPTH: float = 0.17
+const INTERACT_REACH_TIME: float = 0.22
+const INTERACT_HOLD_TIME: float = 0.35
+const INTERACT_RETURN_TIME: float = 0.3
+const SIT_HIP_DROP: float = 0.26
+const SIT_HIP_TIME: float = 0.4
+const SIT_KNEE_DEG: float = 84
+const SIT_TORSO_DEG: float = 6
+const CARRY_ARM_DEG: float = 62
+const CARRY_ELBOW_DEG: float = 74
+const CARRY_TORSO_LEAN_DEG: float = -4
+const CARRY_BLEND_TIME: float = 0.35
+
+# --- Prova visual da locomoção -----------------------------------------------
+
+## Tiras de quadros de `tools/anim_preview.gd`. Derivado: está no .gitignore.
+const ANIM_DIR: String = "res://docs/anim"
+const ANIM_FRAME_WIDTH: int = 300
+const ANIM_FRAME_HEIGHT: int = 460
+const ANIM_STRIP_COLUMNS: int = 8
+const ANIM_STEP_FRAMES: int = 7
+const ANIM_SETTLE_FRAMES: int = 6
+const ANIM_CAMERA_FOV: float = 34
+const ANIM_CAMERA_HEIGHT: float = 0.62
+const ANIM_CAMERA_DISTANCE: float = 4.4
+const ANIM_CAMERA_YAW_DEG: float = 200
+const ANIM_WALK_SPEED: float = 1.5
+const ANIM_RUN_SPEED: float = 4.2
+const ANIM_JUMP_SPEED: float = 1.2
+const ANIM_FOOT_SLIDE_LIMIT: float = 0.02
+const ANIM_SUBJECT: String = "aldeao"
+const PREVIEW_FIGURE_HEIGHT_FALLBACK: float = 1.75
+const ANIM_GAIT_COMPARISON: Array[String] = ["guarda", "batedor", "anciao"]
+const ANIM_COMPARISON_PHASE: float = 0.5
+const ANIM_STATE_FRAMES: int = 40
+const ANIM_INTERACT_REACH: Vector3 = Vector3(0.22, 0.72, -0.34)
+const ANIM_LOOK_AT: Vector3 = Vector3(-2.4, 1.5, 1.2)
+const CHARACTER_DIR: String = "res://assets/generated/characters"
+
 # --- Olhos: capturas e benchmark ---------------------------------------------
 
 ## Onde `tools/godot_shot.gd` grava as capturas. Derivado: está no .gitignore.
