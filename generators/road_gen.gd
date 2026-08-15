@@ -42,13 +42,30 @@ const ENTRY_SPREAD: float = 0.5
 ##
 ## `field` sai modificado: as alturas sob o leito passam a ser as da estrada, e a distância
 ## ao eixo fica registrada em cada vértice próximo.
-static func carve(field: HeightField, world_seed: int) -> Curve3D:
-	var curve: Curve3D = _trace(field, world_seed)
+## `city` muda duas coisas quando não é nulo: a estrada passa a mirar a cidade em vez do
+## centro da planície, e **para de cravar o terreno na muralha**.
+##
+## As duas juntas resolvem um estrago que só aparece com cidade no mundo. A estrada desce
+## da borda do vale com inclinação limitada, então chega à planície ainda alta; como aqui o
+## terreno é que se ajusta à estrada, ela erguia o leito para a própria cota — e o leito
+## passava por dentro da cidade. Medido na seed 123: platô terraplenado a 19,1 m, e uma
+## crista de estrada de até 32,8 m atravessando a praça. Dentro da muralha quem manda é a
+## via principal, que é traçado e não terraplenagem.
+static func carve(field: HeightField, world_seed: int, city: CityLayout = null) -> Curve3D:
+	var destination: Vector2 = field.plain_center if city == null else city.center
+	var curve: Curve3D = _trace(field, world_seed, destination)
 	var points: PackedVector3Array = _sample(curve, field)
-	points = _level(points)
-	_stamp(field, points)
+	points = _level(points, city)
+	_stamp(field, points, city)
 	field.refresh_bounds()
 	return curve
+
+
+## O ponto está dentro da cidade, onde a estrada não mexe no terreno?
+static func _inside_city(city: CityLayout, x: float, z: float) -> bool:
+	if city == null:
+		return false
+	return Vector2(x, z).distance_to(city.center) < Params.CITY_RADIUS
 
 
 ## Traçado: da borda do vale até a praça, com desvio lateral por seed.
@@ -56,12 +73,11 @@ static func carve(field: HeightField, world_seed: int) -> Curve3D:
 ## O desvio existe para a estrada não ser um segmento de reta. Uma reta seria o caminho
 ## honesto entre dois pontos e leria como estrada de mapa, não como estrada de vale —
 ## ninguém corta uma montanha em linha reta quando dá para contorná-la.
-static func _trace(field: HeightField, world_seed: int) -> Curve3D:
+static func _trace(field: HeightField, world_seed: int, destination: Vector2) -> Curve3D:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = world_seed + SEED_OFFSET
 
 	var half: float = field.size() * 0.5
-	var destination: Vector2 = field.plain_center
 	# A entrada nasce numa das quatro bordas, sorteada — é o que mais muda a cara do vale
 	# entre duas seeds, porque arrasta o traçado inteiro junto.
 	var side: int = rng.randi_range(0, EDGE_COUNT - 1)
@@ -109,7 +125,7 @@ static func _sample(curve: Curve3D, field: HeightField) -> PackedVector3Array:
 ## garante nada; o passe de limite anda a lista para a frente e para trás cortando
 ## qualquer degrau que ainda exceda `ROAD_MAX_SLOPE` — nas duas direções, porque limitar
 ## só numa deixa o sentido oposto livre para descer o quanto quiser.
-static func _level(points: PackedVector3Array) -> PackedVector3Array:
+static func _level(points: PackedVector3Array, city: CityLayout = null) -> PackedVector3Array:
 	var count: int = points.size()
 	if count < 2:
 		return points
@@ -125,6 +141,20 @@ static func _level(points: PackedVector3Array) -> PackedVector3Array:
 
 	for index: int in range(1, count):
 		points[index] = _clamp_step(points[index - 1], points[index])
+
+	# O perfil é **pregado na cota do platô** dentro da cidade, antes do passe de volta.
+	#
+	# Sem isto a estrada chega à cidade na altura que a sua própria rampa permite, e como
+	# ela não crava o terreno lá dentro, o aterro terminava num degrau contra a muralha —
+	# medido em 6 m de barranco na porta do portão, e uma inclinação de 3,25 no ponto em que
+	# o leito encontra o platô. Pregar antes do passe de volta faz o limite se propagar para
+	# fora a partir do platô: a estrada passa a *descer até a cidade* em vez de parar acima
+	# dela.
+	if city != null:
+		for index: int in count:
+			if _inside_city(city, points[index].x, points[index].z):
+				points[index] = Vector3(points[index].x, city.ground_y, points[index].z)
+
 	for index: int in range(count - 2, -1, -1):
 		points[index] = _clamp_step(points[index + 1], points[index])
 	return points
@@ -169,7 +199,7 @@ static func design_slope() -> float:
 ## 3. **A mistura parte da altura original**, guardada antes de qualquer escrita. Misturar
 ##    a partir do valor corrente faz cada segmento compor sobre o anterior, e o acostamento
 ##    afunda progressivamente a cada passada em vez de dissolver no relevo.
-static func _stamp(field: HeightField, points: PackedVector3Array) -> void:
+static func _stamp(field: HeightField, points: PackedVector3Array, city: CityLayout) -> void:
 	var reach: float = (
 		Params.ROAD_WIDTH * 0.5
 		+ Params.ROAD_SHOULDER
@@ -200,6 +230,8 @@ static func _stamp(field: HeightField, points: PackedVector3Array) -> void:
 		for iz: int in range(maxi(min_z, 0), mini(max_z, field.cells()) + 1):
 			for ix: int in range(maxi(min_x, 0), mini(max_x, field.cells()) + 1):
 				var world: Vector3 = field.vertex(ix, iz)
+				if _inside_city(city, world.x, world.z):
+					continue
 				var offset: Vector2 = Vector2(world.x - start.x, world.z - start.z)
 				var travel: float = clampf(offset.dot(axis) / axis_length, 0.0, 1.0)
 				var distance: float = offset.distance_to(axis * travel)

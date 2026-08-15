@@ -289,6 +289,102 @@ const VALLEY_SEEDS: Array[int] = [123, 777]
 const VALLEY_MIN_DIFFERENCE: float = 0.12
 const VALLEY_MIN_WALKABLE: float = 0.35
 
+# --- Cidade: sítio e muralha -------------------------------------------------
+
+const CITY_SITE_CANDIDATES: int = 96
+const CITY_SITE_PROBES: int = 40
+const CITY_SITE_MAX_SLOPE: float = 0.22
+const CITY_SITE_ROAD_REACH: float = 110
+const CITY_SITE_ROAD_MIN: float = 14
+const CITY_SITE_SEARCH_RADIUS: float = 96
+
+const CITY_RADIUS: float = 68
+const CITY_WALL_SIDES: int = 11
+const CITY_RADIUS_JITTER: float = 0.11
+const CITY_WALL_ANGLE_JITTER: float = 0.32
+const CITY_WALL_MODULE: float = 2
+const CITY_WALL_MARGIN: float = 5
+const CITY_TOWER_EVERY: int = 3
+const CITY_GATE_WIDTH: float = 6
+
+const CITY_TERRACE_FALLOFF: float = 26
+const CITY_TERRACE_FLATNESS: float = 0.96
+
+# --- Cidade: ruas e lotes ----------------------------------------------------
+
+const CITY_PLAZA_RADIUS: float = 14
+const CITY_MAIN_STREET_WIDTH: float = 7
+const CITY_STREET_WIDTH: float = 5
+const CITY_ALLEY_WIDTH: float = 3.2
+const CITY_MAIN_STREET_BENDS: int = 4
+const CITY_MAIN_STREET_JITTER: float = 7
+const CITY_BLOCK_MIN: float = 16
+const CITY_SPLIT_JITTER: float = 0.17
+const CITY_SPLIT_MAX_DEPTH: int = 5
+const CITY_GRID_JITTER_DEG: float = 9
+
+const CITY_LOT_MIN: float = 6
+const CITY_LOT_MAX: float = 12
+const CITY_LOT_DEPTH_MAX: float = 13
+const CITY_LOT_SETBACK: float = 0.6
+const CITY_LOT_GAP: float = 0.5
+const CITY_LOT_EMPTY_CHANCE: float = 0.17
+
+# --- Cidade: prédios ---------------------------------------------------------
+
+const CITY_BUILDING_MODULE: float = 2
+const CITY_BUILDING_DEPTH_STEP: float = 4
+const CITY_FLOOR_HEIGHT: float = 3
+const CITY_WINDOW_CHANCE: float = 0.44
+const CITY_TINT_JITTER: float = 0.09
+const CITY_HIP_ROOF_CHANCE: float = 0.35
+const CITY_ROOF_DROP: float = 0.08
+
+const CITY_BUILDING_TYPES: Array[Dictionary] = [
+	{"name": &"casa", "weight": 62, "plaza_bias": 0, "floors": Vector2i(1, 2), "width": Vector2i(2, 4), "depth": Vector2i(1, 2), "marker": &"casa"},
+	{"name": &"taverna", "weight": 6, "plaza_bias": 0.9, "floors": Vector2i(2, 2), "width": Vector2i(4, 5), "depth": Vector2i(2, 2), "marker": &"taverna"},
+	{"name": &"ferraria", "weight": 6, "plaza_bias": 0.5, "floors": Vector2i(1, 1), "width": Vector2i(3, 4), "depth": Vector2i(2, 2), "marker": &"ferraria"},
+	{"name": &"celeiro", "weight": 14, "plaza_bias": -0.7, "floors": Vector2i(1, 1), "width": Vector2i(4, 5), "depth": Vector2i(2, 2), "marker": &""},
+	{"name": &"torre", "weight": 4, "plaza_bias": 0.3, "floors": Vector2i(3, 4), "width": Vector2i(2, 2), "depth": Vector2i(1, 1), "marker": &""},
+]
+
+# --- Cidade: props e interiores ----------------------------------------------
+
+const CITY_PLAZA_STALLS: int = 5
+const CITY_PLAZA_STALL_RING: float = 9.5
+const CITY_LANTERN_SPACING: float = 17
+const CITY_PROP_DENSITY: float = 46
+const CITY_YARD_PROPS: int = 4
+const CITY_CLOTHESLINE_CHANCE: float = 0.3
+const CITY_CLOTHESLINE_HEIGHT: float = 3.4
+const CITY_CLOTHESLINE_MAX_SPAN: float = 6
+
+const CITY_GROUND_BLEND: float = 0.82
+const CITY_INTERIOR_TYPES: Array[StringName] = [&"taverna", &"ferraria"]
+const CITY_INTERIOR_CARD_INSET: float = 0.22
+const CITY_INTERIOR_CARD_DARKEN: float = 0.72
+const CITY_INTERIOR_PROPS: int = 7
+
+# --- Cidade: prova -----------------------------------------------------------
+
+const CITY_DIR: String = "res://docs/shots/city"
+const CITY_SHOT_WIDTH: int = 1600
+const CITY_SHOT_HEIGHT: int = 900
+const CITY_SEEDS: Array[int] = [123, 4242, 90210]
+const CITY_DOOR_REACH: float = 2.5
+const CITY_MIN_BUILDINGS: int = 24
+const CITY_MAX_DEAD_ENDS: int = 0
+
+## Pontos de câmera das capturas: nome, marcador de referência, distância, altura e pitch.
+const CITY_SHOT_POINTS: Array[Array] = [
+	[&"praca", &"praca", 16, 4, -12],
+	[&"portao", &"portao", 19, 5, -10],
+	[&"taverna", &"taverna", 11, 3.2, -8],
+	[&"ferraria", &"ferraria", 11, 3.2, -8],
+	[&"rua", &"casa_04", 10, 2.4, -6],
+	[&"muralha", &"praca", 92, 46, -26],
+]
+
 # --- Jogador -----------------------------------------------------------------
 
 const PLAYER_SCENE: String = "res://scenes/player/player.tscn"

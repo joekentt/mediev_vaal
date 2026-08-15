@@ -195,14 +195,14 @@ static func _erode(field: HeightField) -> void:
 ## Cada pedaço é um `StaticBody3D` com malha visível e colisão trimesh. Trimesh, e não
 ## heightmap: a `HeightMapShape3D` do Godot seria mais barata, mas exigiria um corpo por
 ## vale inteiro e perderia a granularidade de culling que os pedaços dão à parte visual.
-static func build_chunks(field: HeightField, parent: Node3D) -> int:
+static func build_chunks(field: HeightField, parent: Node3D, city: CityLayout = null) -> int:
 	var per_side: int = int(ceil(float(field.cells()) / float(Params.TERRAIN_CHUNK_CELLS)))
 	var material: StandardMaterial3D = MaterialLibrary.get_material(TERRAIN_MATERIAL)
 	var created: int = 0
 
 	for chunk_z: int in per_side:
 		for chunk_x: int in per_side:
-			var chunk: StaticBody3D = _build_chunk(field, chunk_x, chunk_z, material)
+			var chunk: StaticBody3D = _build_chunk(field, chunk_x, chunk_z, material, city)
 			if chunk == null:
 				continue
 			parent.add_child(chunk)
@@ -212,7 +212,8 @@ static func build_chunks(field: HeightField, parent: Node3D) -> int:
 
 
 static func _build_chunk(
-	field: HeightField, chunk_x: int, chunk_z: int, material: StandardMaterial3D
+	field: HeightField, chunk_x: int, chunk_z: int, material: StandardMaterial3D,
+	city: CityLayout
 ) -> StaticBody3D:
 	var span: int = Params.TERRAIN_CHUNK_CELLS
 	var start_x: int = chunk_x * span
@@ -225,7 +226,7 @@ static func _build_chunk(
 	var builder: MeshBuilder = MeshBuilder.new()
 	for iz: int in range(start_z, end_z):
 		for ix: int in range(start_x, end_x):
-			_emit_cell(builder, field, ix, iz)
+			_emit_cell(builder, field, ix, iz, city)
 
 	var mesh: ArrayMesh = builder.commit(CHUNK_CATEGORY)
 	if mesh == null:
@@ -253,18 +254,20 @@ static func _build_chunk(
 
 ## Uma célula, dois triângulos. A diagonal alterna em xadrez: fixa, ela desenha um
 ## grão diagonal visível no vale inteiro assim que a luz bate de raspão.
-static func _emit_cell(builder: MeshBuilder, field: HeightField, ix: int, iz: int) -> void:
+static func _emit_cell(
+	builder: MeshBuilder, field: HeightField, ix: int, iz: int, city: CityLayout
+) -> void:
 	var a: Vector3 = field.vertex(ix, iz)
 	var b: Vector3 = field.vertex(ix + 1, iz)
 	var c: Vector3 = field.vertex(ix + 1, iz + 1)
 	var d: Vector3 = field.vertex(ix, iz + 1)
 
 	if (ix + iz) % 2 == 0:
-		builder.add_triangle(a, d, c, _face_color(field, a, d, c, ix, iz))
-		builder.add_triangle(a, c, b, _face_color(field, a, c, b, ix, iz))
+		builder.add_triangle(a, d, c, _face_color(field, a, d, c, ix, iz, city))
+		builder.add_triangle(a, c, b, _face_color(field, a, c, b, ix, iz, city))
 	else:
-		builder.add_triangle(a, d, b, _face_color(field, a, d, b, ix, iz))
-		builder.add_triangle(b, d, c, _face_color(field, b, d, c, ix, iz))
+		builder.add_triangle(a, d, b, _face_color(field, a, d, b, ix, iz, city))
+		builder.add_triangle(b, d, c, _face_color(field, b, d, c, ix, iz, city))
 
 
 ## Cor de um triângulo: grama, terra ou rocha, por altitude e inclinação — e terra batida
@@ -274,7 +277,7 @@ static func _emit_cell(builder: MeshBuilder, field: HeightField, ix: int, iz: in
 ## onde a terra não se segura; e um platô alto continua sendo grama, que é o que se vê nas
 ## montanhas de verdade.
 static func _face_color(
-	field: HeightField, a: Vector3, b: Vector3, c: Vector3, ix: int, iz: int
+	field: HeightField, a: Vector3, b: Vector3, c: Vector3, ix: int, iz: int, city: CityLayout
 ) -> Color:
 	var center: Vector3 = (a + b + c) / TRIANGLE_VERTS
 	var normal: Vector3 = (b - a).cross(c - a).normalized()
@@ -303,7 +306,25 @@ static func _face_color(
 		)
 		color = color.lerp(Params.color(&"earth_dark"), packed)
 
+	color = _city_ground(color, center, city)
 	return _jitter(color, ix, iz)
+
+
+## Dentro da muralha o chão é batido, não pasto.
+##
+## A transição usa o mesmo disco e a mesma queda da terraplenagem: assim a cor termina
+## exatamente onde o platô termina. Fazê-la parar na muralha desenharia uma circunferência
+## de cor no chão, visível de longe e de dentro — e nada no mundo justifica essa linha.
+static func _city_ground(color: Color, center: Vector3, city: CityLayout) -> Color:
+	if city == null:
+		return color
+	var flat: float = Params.CITY_RADIUS + Params.CITY_WALL_MODULE
+	var outer: float = flat + Params.CITY_TERRACE_FALLOFF
+	var distance: float = Vector2(center.x, center.z).distance_to(city.center)
+	if distance >= outer:
+		return color
+	var pull: float = (1.0 - smoothstep(flat, outer, distance)) * Params.CITY_GROUND_BLEND
+	return color.lerp(Params.color(&"earth"), pull)
 
 
 ## Variação de tom por triângulo, determinística. Sem ela a malha fica chapada em áreas

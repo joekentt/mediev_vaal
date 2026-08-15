@@ -42,6 +42,8 @@ const SPAWN_CLEARANCE: float = 0.4
 ## Campo do vale gerado por último. Quem precisa da altura do relevo — o bench, para não
 ## enterrar a câmera na montanha; a prova, para medir — lê daqui em vez de refazer o ruído.
 static var last_field: HeightField = null
+## Traçado da última cidade gerada. `make city` mede daqui; a fase 10 vai ler os marcadores.
+static var last_city: CityLayout = null
 ## Estatística da última geração. Vai para `docs/bench.json` e para o relatório da prova.
 static var last_report: Dictionary = {}
 
@@ -60,18 +62,34 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	var started: int = Time.get_ticks_msec()
 
 	var field: HeightField = TerrainGenerator.build_field(world_seed)
-	var curve: Curve3D = RoadGenerator.carve(field, world_seed)
+	# O sítio da cidade escolhe-se e terraplena-se **antes** da estrada. Ao contrário, o
+	# platô desceria por cima de um leito já cravado e a estrada chegaria por um degrau.
+	var layout: CityLayout = CityGenerator.plan(field, world_seed)
+	var curve: Curve3D = RoadGenerator.carve(field, world_seed, layout)
+	# E a muralha só depois da estrada: é o campo de distância dela que diz onde é o portão.
+	CityGenerator.plan_streets(layout, curve, world_seed)
 	last_field = field
+	last_city = layout
+
+	var problems: PackedStringArray = CityGenerator.validate(layout)
+	for problem: String in problems:
+		push_error("Cidade inválida (seed %d): %s" % [world_seed, problem])
 
 	var terrain: Node3D = Node3D.new()
 	terrain.name = TERRAIN_ROOT_NAME
 	stage.add_child(terrain)
-	var chunks: int = TerrainGenerator.build_chunks(field, terrain)
+	var chunks: int = TerrainGenerator.build_chunks(field, terrain, layout)
 
 	var scatter_root: Node3D = Node3D.new()
 	scatter_root.name = SCATTER_ROOT_NAME
 	stage.add_child(scatter_root)
-	var scatter: Dictionary = ScatterGenerator.scatter(field, scatter_root, world_seed)
+	# A vegetação não entra na cidade: uma árvore no meio da praça não é acaso simpático,
+	# é um espalhamento que não sabe que a cidade existe.
+	var scatter: Dictionary = ScatterGenerator.scatter(
+		field, scatter_root, world_seed, layout.center, Params.CITY_RADIUS + Params.CITY_WALL_MARGIN
+	)
+
+	var city: Dictionary = CityBuilder.build(layout, field, stage, world_seed)
 
 	var region: NavigationRegion3D = build_navigation()
 	stage.add_child(region)
@@ -85,8 +103,13 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 		"road_slope": RoadGenerator.measure_slope(field, curve),
 		"road_slope_limit": Params.ROAD_MAX_SLOPE,
 		"terrain_span_m": field.span(),
+		"city_problems": problems.size(),
+		"city_instances": int(city["instances"]),
+		"city_draw_nodes": int(city["draw_nodes"]),
+		"city_occluders": int(city["occluders"]),
 		"build_ms": float(Time.get_ticks_msec() - started),
 	}
+	last_report.merge(layout.report)
 
 	if with_player:
 		var player: Node3D = build_player(field)
@@ -242,7 +265,12 @@ static func build_navigation() -> NavigationRegion3D:
 	mesh.agent_height = Params.NAV_AGENT_HEIGHT
 	mesh.agent_max_climb = Params.NAV_AGENT_MAX_CLIMB
 	mesh.agent_max_slope = Params.NAV_AGENT_MAX_SLOPE_DEG
-	mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_MESH_INSTANCES
+	# Colisor, e não malha: o terreno já expõe a sua malha de colisão e os prédios expõem
+	# uma caixa por prédio. Ler malha visível obrigaria a cidade a publicar cada telha para
+	# o assador, e a navegação não tem nada a fazer com telha — o que ela precisa saber é
+	# onde não se passa, que é exatamente o que a caixa diz.
+	mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	mesh.geometry_collision_mask = Params.LAYER_WORLD
 	mesh.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN
 	mesh.geometry_source_group_name = Params.NAV_GROUP
 
@@ -268,13 +296,18 @@ static func build_player(field: HeightField) -> Node3D:
 	return player
 
 
-## Onde o jogador nasce: o centro da planície, apoiado no relevo.
+## Onde o jogador nasce: o portão da cidade, apoiado no relevo.
+##
+## Era o centro da planície até a cidade existir. Nascer no portão põe a cidade inteira à
+## frente na primeira vista, que é onde ela deve estar — nascer na praça entregaria o
+## interior antes da silhueta.
 static func spawn_point(field: HeightField) -> Vector3:
 	if field == null:
 		return Vector3.ZERO
-	return field.ground_point(
-		field.plain_center.x, field.plain_center.y, SPAWN_CLEARANCE
-	)
+	var spot: Vector2 = field.plain_center
+	if last_city != null:
+		spot = last_city.gate_point + last_city.gate_normal * Params.CITY_WALL_MARGIN
+	return field.ground_point(spot.x, spot.y, SPAWN_CLEARANCE)
 
 
 ## Chão plano do estágio da fase 1, com colisão de plano infinito.

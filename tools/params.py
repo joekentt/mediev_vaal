@@ -959,6 +959,167 @@ BENCH_CAMERA_CLEARANCE = 2.4             # m acima do relevo em que a câmera do
 BENCH_LOW_PERCENTILE = 1.0               # "1% low": pior 1% dos frames
 
 # ---------------------------------------------------------------------------
+# Cidade
+# ---------------------------------------------------------------------------
+# A cidade nasce da mesma seed do vale, em etapas: sítio -> muralha -> ruas -> lotes ->
+# prédios -> props -> interiores. Cada etapa lê só o que a anterior produziu, e é por isso
+# que dá para provar cada uma sozinha.
+#
+# Escala humana é o critério de aceite que mais depende destes números. A régua: uma
+# pessoa tem 1,75 m, um andar tem WALL_HEIGHT (3 m), um módulo de parede tem GRID_SIZE
+# (2 m). Uma rua de 5 m é larga o bastante para duas carroças e estreita o bastante para
+# a fachada oposta preencher o campo de visão — que é o que faz uma cidade parecer cidade
+# e não um estacionamento com prédios.
+
+# --- Sítio -------------------------------------------------------------------
+# A cidade não escolhe o centro da planície de olhos fechados: ela mede. O terreno da
+# fase 4 já tem uma planície, mas ela desliza com a seed e a estrada chega por um lado
+# diferente a cada vale — cravar o centro entregaria cidades encostadas na montanha.
+
+CITY_SITE_CANDIDATES = 96       # sítios sorteados e pontuados dentro da planície
+CITY_SITE_PROBES = 40           # amostras de relevo por candidato
+CITY_SITE_MAX_SLOPE = 0.22      # inclinação média acima da qual o sítio é recusado
+CITY_SITE_ROAD_REACH = 110.0    # m: além disto o sítio está longe demais da estrada
+CITY_SITE_ROAD_MIN = 14.0       # m: e mais perto que isto a muralha comeria a estrada
+CITY_SITE_SEARCH_RADIUS = 96.0  # m de raio em volta da planície onde se procura
+
+# --- Muralha -----------------------------------------------------------------
+# Polígono, não círculo: um anel perfeito lê como cerca de arena. O número ímpar de lados
+# e o ruído no raio tiram a simetria que o olho reconhece na primeira volta de câmera.
+
+CITY_RADIUS = 68.0              # m, raio médio da muralha
+CITY_WALL_SIDES = 11            # lados do polígono (ímpar: nenhum lado tem oposto igual)
+CITY_RADIUS_JITTER = 0.11       # fração do raio que cada vértice pode variar
+CITY_WALL_ANGLE_JITTER = 0.32   # fração do passo angular que cada vértice pode deslizar
+CITY_WALL_MODULE = 2.0          # m por peça de muralha — o módulo do kit
+CITY_WALL_MARGIN = 5.0          # m livres entre a muralha e o primeiro quarteirão
+CITY_TOWER_EVERY = 3            # torre a cada N vértices da muralha
+CITY_GATE_WIDTH = 6.0           # m do vão do portão (largura da peça wall_gate)
+
+# --- Terraplenagem -----------------------------------------------------------
+# O sítio é achatado antes de qualquer coisa ser construída. Uma cidade em ladeira exigiria
+# escada em cada porta, e o kit não tem essa peça — a fase 7 é que traria.
+
+CITY_TERRACE_FALLOFF = 26.0     # m de transição entre o platô e o relevo original
+CITY_TERRACE_FLATNESS = 0.96    # 1.0 achata por completo; menos deixa respiro
+
+# --- Ruas --------------------------------------------------------------------
+# A rede tem três níveis, e a diferença de largura entre eles é o que dá hierarquia
+# legível: a via principal do portão à praça, as ruas da subdivisão e os becos.
+
+CITY_PLAZA_RADIUS = 14.0        # m — a praça, onde nada é construído
+CITY_MAIN_STREET_WIDTH = 7.0
+CITY_STREET_WIDTH = 5.0
+CITY_ALLEY_WIDTH = 3.2
+CITY_MAIN_STREET_BENDS = 4      # vértices intermediários da via principal
+CITY_MAIN_STREET_JITTER = 7.0   # m de desvio lateral por vértice — a via não é reta
+# Um quarteirão para de se dividir abaixo do dobro disto, ou seja, por volta de 32 m —
+# fundo o bastante para duas fileiras de lotes costas com costas, que é o desenho de quadra
+# que faz cada fachada olhar a sua própria rua. Baixá-lo multiplica cortes, e cada corte é
+# uma rua: a 12 m as ruas passaram a ocupar mais da metade do terreno dentro da muralha.
+CITY_BLOCK_MIN = 16.0           # m: abaixo disto o quarteirão não se divide mais
+CITY_SPLIT_JITTER = 0.17        # fração do lado em que o corte pode cair fora do meio
+# Profundidade da subdivisão. É um teto de segurança, não o que decide o tamanho do
+# quarteirão — quem decide é CITY_BLOCK_MIN, e a recursão para sozinha antes daqui.
+# Subir isto para sete foi tentador e errado: cada corte é uma rua, e sete níveis puseram
+# 40 ruas num raio de 49 m. Os quarteirões cobriam 29% do terreno útil e o resto era
+# calçamento — uma cidade não é 70% rua.
+CITY_SPLIT_MAX_DEPTH = 5        # profundidade máxima da subdivisão recursiva
+CITY_GRID_JITTER_DEG = 9.0      # inclinação aleatória da malha inteira, em graus
+
+# --- Lotes -------------------------------------------------------------------
+
+CITY_LOT_MIN = 6.0              # m de testada mínima
+CITY_LOT_MAX = 12.0             # m de testada máxima
+CITY_LOT_DEPTH_MAX = 13.0       # m: mais fundo que isto o quarteirão vira duas fileiras
+CITY_LOT_SETBACK = 0.6          # m entre a fachada e a rua
+CITY_LOT_GAP = 0.5              # m entre lotes vizinhos
+CITY_LOT_EMPTY_CHANCE = 0.17    # fração de lotes que viram pátio, não prédio
+
+# --- Prédios -----------------------------------------------------------------
+# Fachada em módulos de 2 m; profundidade em módulos de 4 m, que é o que os telhados do
+# kit ladrilham (roof_gable cobre 2x4 m, roof_hip cobre 4x4 m). Sair dessa malha deixaria
+# o telhado sobrando ou faltando, e não há peça de remate.
+
+CITY_BUILDING_MODULE = 2.0      # m — passo da fachada
+CITY_BUILDING_DEPTH_STEP = 4.0  # m — passo da profundidade, imposto pelo telhado
+CITY_FLOOR_HEIGHT = 3.0         # m por andar (a altura da peça wall)
+CITY_WINDOW_CHANCE = 0.44       # fração dos módulos de fachada que viram janela
+CITY_TINT_JITTER = 0.09         # variação de tom por prédio, via cor de instância
+CITY_HIP_ROOF_CHANCE = 0.35     # chance de telhado de quatro águas quando cabe
+# O telhado desce um pouco dentro da parede. Assentado exatamente na cota do topo, a base
+# da peça de telhado e o topo da peça de parede ficam coplanares, e o renderizador não tem
+# como decidir qual está na frente: a fachada inteira sai listrada na linha do beiral.
+# Oito centímetros bastam para uma peça entrar na outra sem abrir fresta visível.
+CITY_ROOF_DROP = 0.08           # m que o telhado afunda na parede
+
+# Tipos de prédio. `weight` é o peso do sorteio; `plaza_bias` puxa o tipo para perto da
+# praça (1.0 = só no centro, 0.0 = indiferente, negativo = periferia); `floors` é o
+# intervalo de andares; `width`/`depth` são intervalos em módulos.
+CITY_BUILDING_TYPES: tuple[dict, ...] = (
+    {"name": "casa",    "weight": 62.0, "plaza_bias":  0.0,
+     "floors": (1, 2), "width": (2, 4), "depth": (1, 2), "marker": "casa"},
+    {"name": "taverna", "weight":  6.0, "plaza_bias":  0.9,
+     "floors": (2, 2), "width": (4, 5), "depth": (2, 2), "marker": "taverna"},
+    {"name": "ferraria", "weight": 6.0, "plaza_bias":  0.5,
+     "floors": (1, 1), "width": (3, 4), "depth": (2, 2), "marker": "ferraria"},
+    {"name": "celeiro", "weight": 14.0, "plaza_bias": -0.7,
+     "floors": (1, 1), "width": (4, 5), "depth": (2, 2), "marker": ""},
+    {"name": "torre",   "weight":  4.0, "plaza_bias":  0.3,
+     "floors": (3, 4), "width": (2, 2), "depth": (1, 1), "marker": ""},
+)
+
+# --- Props -------------------------------------------------------------------
+# Densidade por hectare, como no espalhamento do vale — a mesma unidade em todo o projeto.
+
+CITY_PLAZA_STALLS = 5           # bancas na praça: viram mercado_01..05
+CITY_PLAZA_STALL_RING = 9.5     # m do centro da praça em que as bancas se dispõem
+CITY_LANTERN_SPACING = 17.0     # m entre lanternas ao longo das ruas
+CITY_PROP_DENSITY = 46.0        # props soltos por hectare de rua
+CITY_YARD_PROPS = 4             # props por lote vazio (pátio)
+CITY_CLOTHESLINE_CHANCE = 0.3   # chance de um beco estreito ganhar varal
+CITY_CLOTHESLINE_HEIGHT = 3.4   # m — acima da cabeça, abaixo do beiral
+CITY_CLOTHESLINE_MAX_SPAN = 6.0 # m: mais que isto e a corda voa sem apoio
+
+# --- Interiores --------------------------------------------------------------
+# Dois interiores de verdade (taverna e ferraria) e cartas escuras nos demais. A carta é
+# um plano atrás da janela: a 3 m de distância ela lê como sombra de cômodo, e custa dois
+# triângulos contra os ~200 de um interior real.
+
+# Chão batido da cidade. O terreno da fase 4 pinta tudo de pasto, e pasto dentro da
+# muralha lê como acampamento em campo aberto: o que faz uma cidade parecer pisada é o
+# chão dela ter perdido a grama. A transição acompanha a terraplenagem, senão o platô teria
+# uma borda de cor onde não tem borda de relevo.
+CITY_GROUND_BLEND = 0.82        # quanto o chão da cidade vira terra batida, no miolo
+
+CITY_INTERIOR_TYPES = ("taverna", "ferraria")
+CITY_INTERIOR_CARD_INSET = 0.22 # m atrás do plano da fachada
+CITY_INTERIOR_CARD_DARKEN = 0.72 # quanto a carta escurece a cor da parede
+CITY_INTERIOR_PROPS = 7         # props por interior real
+
+# --- Prova da cidade ---------------------------------------------------------
+
+CITY_DIR = "docs/shots/city"
+CITY_SHOT_WIDTH = 1600          # px das capturas da cidade
+CITY_SHOT_HEIGHT = 900
+CITY_SEEDS = (123, 4242, 90210)  # três seeds, três cidades plausíveis
+CITY_DOOR_REACH = 2.5           # m: distância máxima da porta até a malha de navegação
+CITY_MIN_BUILDINGS = 24         # menos que isto não é cidade, é acampamento
+CITY_MAX_DEAD_ENDS = 0          # becos sem saída não intencionais tolerados
+
+# Pontos de câmera das capturas da cidade. Cada um é (nome, marcador, distância, altura,
+# pitch): a câmera é posicionada em relação a um `Marker3D` gerado, e não em coordenadas
+# absolutas — a cidade muda de lugar com a seed, e um ponto fixo fotografaria o campo.
+CITY_SHOT_POINTS: tuple[tuple[str, str, float, float, float], ...] = (
+    ("praca",     "praca",    16.0,  4.0, -12.0),
+    ("portao",    "portao",   19.0,  5.0, -10.0),
+    ("taverna",   "taverna",  11.0,  3.2, -8.0),
+    ("ferraria",  "ferraria", 11.0,  3.2, -8.0),
+    ("rua",       "casa_04",  10.0,  2.4, -6.0),
+    ("muralha",   "praca",    92.0, 46.0, -26.0),
+)
+
+# ---------------------------------------------------------------------------
 # Geração
 # ---------------------------------------------------------------------------
 

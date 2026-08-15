@@ -34,9 +34,25 @@ const PROXY_MATERIAL: StringName = &"proxy"
 ## vale inteiro: reconstruí-las por bloco daria 32 malhas idênticas e nenhum agrupamento.
 static var _prisms: Dictionary = {}
 
+## Disco onde nada é plantado, escrito por `scatter` e lido por `_sample_type`.
+static var _keep_out_center: Vector2 = Vector2.ZERO
+static var _keep_out_radius: float = -1.0
+
 
 ## Espalha tudo sob `parent`. Devolve estatística para o relatório e para o bench.
-static func scatter(field: HeightField, parent: Node3D, world_seed: int) -> Dictionary:
+##
+## `keep_out_center`/`keep_out_radius` recortam um disco onde nada é plantado — é como a
+## cidade some do espalhamento sem que o espalhamento saiba o que é uma cidade. Raio zero
+## ou negativo desliga o recorte, que é o caso do vale sozinho.
+static func scatter(
+	field: HeightField,
+	parent: Node3D,
+	world_seed: int,
+	keep_out_center: Vector2 = Vector2.ZERO,
+	keep_out_radius: float = -1.0
+) -> Dictionary:
+	_keep_out_center = keep_out_center
+	_keep_out_radius = keep_out_radius
 	var tiles: int = maxi(int(ceil(field.size() / Params.SCATTER_TILE)), 1)
 	var meshes: Dictionary = _load_meshes()
 	var placed: int = 0
@@ -392,6 +408,11 @@ static func _sample_type(
 			if absf(x) > field.size() * 0.5 or absf(z) > field.size() * 0.5:
 				continue
 			if field.road_distance(x, z) < clearance:
+				continue
+			if (
+				_keep_out_radius > 0.0
+				and Vector2(x, z).distance_to(_keep_out_center) < _keep_out_radius
+			):
 				continue
 			if field.slope_at(x, z) > float(spec["max_slope"]):
 				continue

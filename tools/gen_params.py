@@ -107,6 +107,37 @@ def _scatter_types() -> str:
     return "\n".join(lines)
 
 
+def _building_types() -> str:
+    lines = []
+    for spec in P.CITY_BUILDING_TYPES:
+        floors_low, floors_high = spec["floors"]
+        width_low, width_high = spec["width"]
+        depth_low, depth_high = spec["depth"]
+        lines.append(
+            f'\t{{"name": &"{spec["name"]}", "weight": {P.num(spec["weight"])}, '
+            f'"plaza_bias": {P.num(spec["plaza_bias"])}, '
+            f'"floors": Vector2i({floors_low}, {floors_high}), '
+            f'"width": Vector2i({width_low}, {width_high}), '
+            f'"depth": Vector2i({depth_low}, {depth_high}), '
+            f'"marker": &"{spec["marker"]}"}},'
+        )
+    return "\n".join(lines)
+
+
+def _interior_types() -> str:
+    return ", ".join(f'&"{name}"' for name in P.CITY_INTERIOR_TYPES)
+
+
+def _city_shots() -> str:
+    lines = []
+    for name, marker, distance, height, pitch in P.CITY_SHOT_POINTS:
+        lines.append(
+            f'\t[&"{name}", &"{marker}", {P.num(distance)}, '
+            f"{P.num(height)}, {P.num(pitch)}],"
+        )
+    return "\n".join(lines)
+
+
 def _anim_comparison() -> str:
     return ", ".join(f'"{name}"' for name in P.ANIM_GAIT_COMPARISON)
 
@@ -330,6 +361,93 @@ const VALLEY_DIR: String = "res://{P.VALLEY_DIR}"
 const VALLEY_SEEDS: Array[int] = [{", ".join(str(v) for v in P.VALLEY_SEEDS)}]
 const VALLEY_MIN_DIFFERENCE: float = {P.num(P.VALLEY_MIN_DIFFERENCE)}
 const VALLEY_MIN_WALKABLE: float = {P.num(P.VALLEY_MIN_WALKABLE)}
+
+# --- Cidade: sítio e muralha -------------------------------------------------
+
+const CITY_SITE_CANDIDATES: int = {P.CITY_SITE_CANDIDATES}
+const CITY_SITE_PROBES: int = {P.CITY_SITE_PROBES}
+const CITY_SITE_MAX_SLOPE: float = {P.num(P.CITY_SITE_MAX_SLOPE)}
+const CITY_SITE_ROAD_REACH: float = {P.num(P.CITY_SITE_ROAD_REACH)}
+const CITY_SITE_ROAD_MIN: float = {P.num(P.CITY_SITE_ROAD_MIN)}
+const CITY_SITE_SEARCH_RADIUS: float = {P.num(P.CITY_SITE_SEARCH_RADIUS)}
+
+const CITY_RADIUS: float = {P.num(P.CITY_RADIUS)}
+const CITY_WALL_SIDES: int = {P.CITY_WALL_SIDES}
+const CITY_RADIUS_JITTER: float = {P.num(P.CITY_RADIUS_JITTER)}
+const CITY_WALL_ANGLE_JITTER: float = {P.num(P.CITY_WALL_ANGLE_JITTER)}
+const CITY_WALL_MODULE: float = {P.num(P.CITY_WALL_MODULE)}
+const CITY_WALL_MARGIN: float = {P.num(P.CITY_WALL_MARGIN)}
+const CITY_TOWER_EVERY: int = {P.CITY_TOWER_EVERY}
+const CITY_GATE_WIDTH: float = {P.num(P.CITY_GATE_WIDTH)}
+
+const CITY_TERRACE_FALLOFF: float = {P.num(P.CITY_TERRACE_FALLOFF)}
+const CITY_TERRACE_FLATNESS: float = {P.num(P.CITY_TERRACE_FLATNESS)}
+
+# --- Cidade: ruas e lotes ----------------------------------------------------
+
+const CITY_PLAZA_RADIUS: float = {P.num(P.CITY_PLAZA_RADIUS)}
+const CITY_MAIN_STREET_WIDTH: float = {P.num(P.CITY_MAIN_STREET_WIDTH)}
+const CITY_STREET_WIDTH: float = {P.num(P.CITY_STREET_WIDTH)}
+const CITY_ALLEY_WIDTH: float = {P.num(P.CITY_ALLEY_WIDTH)}
+const CITY_MAIN_STREET_BENDS: int = {P.CITY_MAIN_STREET_BENDS}
+const CITY_MAIN_STREET_JITTER: float = {P.num(P.CITY_MAIN_STREET_JITTER)}
+const CITY_BLOCK_MIN: float = {P.num(P.CITY_BLOCK_MIN)}
+const CITY_SPLIT_JITTER: float = {P.num(P.CITY_SPLIT_JITTER)}
+const CITY_SPLIT_MAX_DEPTH: int = {P.CITY_SPLIT_MAX_DEPTH}
+const CITY_GRID_JITTER_DEG: float = {P.num(P.CITY_GRID_JITTER_DEG)}
+
+const CITY_LOT_MIN: float = {P.num(P.CITY_LOT_MIN)}
+const CITY_LOT_MAX: float = {P.num(P.CITY_LOT_MAX)}
+const CITY_LOT_DEPTH_MAX: float = {P.num(P.CITY_LOT_DEPTH_MAX)}
+const CITY_LOT_SETBACK: float = {P.num(P.CITY_LOT_SETBACK)}
+const CITY_LOT_GAP: float = {P.num(P.CITY_LOT_GAP)}
+const CITY_LOT_EMPTY_CHANCE: float = {P.num(P.CITY_LOT_EMPTY_CHANCE)}
+
+# --- Cidade: prédios ---------------------------------------------------------
+
+const CITY_BUILDING_MODULE: float = {P.num(P.CITY_BUILDING_MODULE)}
+const CITY_BUILDING_DEPTH_STEP: float = {P.num(P.CITY_BUILDING_DEPTH_STEP)}
+const CITY_FLOOR_HEIGHT: float = {P.num(P.CITY_FLOOR_HEIGHT)}
+const CITY_WINDOW_CHANCE: float = {P.num(P.CITY_WINDOW_CHANCE)}
+const CITY_TINT_JITTER: float = {P.num(P.CITY_TINT_JITTER)}
+const CITY_HIP_ROOF_CHANCE: float = {P.num(P.CITY_HIP_ROOF_CHANCE)}
+const CITY_ROOF_DROP: float = {P.num(P.CITY_ROOF_DROP)}
+
+const CITY_BUILDING_TYPES: Array[Dictionary] = [
+{_building_types()}
+]
+
+# --- Cidade: props e interiores ----------------------------------------------
+
+const CITY_PLAZA_STALLS: int = {P.CITY_PLAZA_STALLS}
+const CITY_PLAZA_STALL_RING: float = {P.num(P.CITY_PLAZA_STALL_RING)}
+const CITY_LANTERN_SPACING: float = {P.num(P.CITY_LANTERN_SPACING)}
+const CITY_PROP_DENSITY: float = {P.num(P.CITY_PROP_DENSITY)}
+const CITY_YARD_PROPS: int = {P.CITY_YARD_PROPS}
+const CITY_CLOTHESLINE_CHANCE: float = {P.num(P.CITY_CLOTHESLINE_CHANCE)}
+const CITY_CLOTHESLINE_HEIGHT: float = {P.num(P.CITY_CLOTHESLINE_HEIGHT)}
+const CITY_CLOTHESLINE_MAX_SPAN: float = {P.num(P.CITY_CLOTHESLINE_MAX_SPAN)}
+
+const CITY_GROUND_BLEND: float = {P.num(P.CITY_GROUND_BLEND)}
+const CITY_INTERIOR_TYPES: Array[StringName] = [{_interior_types()}]
+const CITY_INTERIOR_CARD_INSET: float = {P.num(P.CITY_INTERIOR_CARD_INSET)}
+const CITY_INTERIOR_CARD_DARKEN: float = {P.num(P.CITY_INTERIOR_CARD_DARKEN)}
+const CITY_INTERIOR_PROPS: int = {P.CITY_INTERIOR_PROPS}
+
+# --- Cidade: prova -----------------------------------------------------------
+
+const CITY_DIR: String = "res://{P.CITY_DIR}"
+const CITY_SHOT_WIDTH: int = {P.CITY_SHOT_WIDTH}
+const CITY_SHOT_HEIGHT: int = {P.CITY_SHOT_HEIGHT}
+const CITY_SEEDS: Array[int] = [{", ".join(str(v) for v in P.CITY_SEEDS)}]
+const CITY_DOOR_REACH: float = {P.num(P.CITY_DOOR_REACH)}
+const CITY_MIN_BUILDINGS: int = {P.CITY_MIN_BUILDINGS}
+const CITY_MAX_DEAD_ENDS: int = {P.CITY_MAX_DEAD_ENDS}
+
+## Pontos de câmera das capturas: nome, marcador de referência, distância, altura e pitch.
+const CITY_SHOT_POINTS: Array[Array] = [
+{_city_shots()}
+]
 
 # --- Jogador -----------------------------------------------------------------
 

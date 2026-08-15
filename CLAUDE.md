@@ -32,6 +32,8 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | Relevo do vale, colisão e cor | `generators/terrain_gen.gd` | `Params` + seed |
 | Estrada e terraplenagem | `generators/road_gen.gd` | `Params` + seed |
 | Vegetação e rochas em `MultiMesh` | `generators/scatter_gen.gd` | `Params` + seed |
+| Traçado da cidade (sítio, muralha, ruas, lotes) | `generators/city_gen.gd` | `Params` + seed |
+| Prédios, props, interiores e marcadores | `generators/city_builder.gd` | `CityLayout` |
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
 | `docs/assets.html` + renders | `tools/preview_assets.py` + `tools/contact_sheet.py` | manifesto do kit |
 | `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
@@ -39,6 +41,7 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `docs/anim/*.png` | `tools/anim_preview.gd` | `Params.GAIT_PROFILES` |
 | `docs/player/controle.png` + medidas | `tools/playtest.gd` | `Params.PLAYER_*` |
 | `docs/valley/seeds.png` + medidas | `tools/valley.gd` | `Params.VALLEY_SEEDS` |
+| `docs/shots/city/*.png` + medidas | `tools/city.gd` | `Params.CITY_SEEDS` |
 
 Consequências práticas:
 
@@ -81,6 +84,7 @@ make preview  renders do kit + docs/assets.html + capturas da cena
 make anim     tiras de quadros da locomoção em docs/anim/  (precisa do Godot)
 make playtest dirige o jogador e mede o controle          (precisa do Godot)
 make valley   gera duas seeds e prova que diferem e são jogáveis (precisa do Godot)
+make city     gera 3 cidades, valida e captura 6 pontos; `make city SEED=123` (precisa do Godot)
 make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
@@ -103,7 +107,7 @@ A seed do vale **não mora em `params.py`**: mora no manifesto do mundo, escrita
 `make world SEED=123` e lida por `WorldGenerator.current_seed()`. Trocar de vale é uma
 linha de comando, não uma edição de fonte seguida de `make params`.
 
-`make preview`, `make anim`, `make valley` e `make bench` acham o Godot pelo `PATH` ou pela variável
+`make preview`, `make anim`, `make valley`, `make city` e `make bench` acham o Godot pelo `PATH` ou pela variável
 `GODOT`:
 
 ```
@@ -245,6 +249,61 @@ diferença de relevo entre elas **para dentro da borda** (a borda é idêntica e
 seed, e no denominador ela só dilui), confere que a mesma seed duas vezes dá diferença
 zero, e cobra estrada, navegação e ponto de nascimento em cada vale.
 
+### A cidade
+
+Uma cidade murada nasce da mesma seed do vale, em sete etapas isoladas. Cada uma lê só o
+que a anterior escreveu, e nenhuma delas cria um nó: quem instancia é `city_builder.gd`,
+depois que o traçado inteiro está fechado **e validado**. É o que permite reprovar uma
+cidade quebrada antes de ela custar mil instâncias, e testar a subdivisão sem abrir janela.
+
+1. **Sítio** — sorteia candidatos na planície e pontua cada um pela inclinação média sob a
+   futura muralha. Cravar o centro da planície seria mais simples e poria fileiras de casas
+   em ladeira que a vista aérea não mostra.
+2. **Terraplenagem** — o platô recebe a altura média medida. Sem isso o kit não fecha: as
+   peças de parede são prismas retos de 3 m e não há remate para encostar em ladeira.
+3. **Muralha** — polígono de 11 lados com raio e ângulo ruidosos. Anel perfeito lê como
+   cerca de arena. O portão é a aresta cujo meio está mais perto do **eixo da estrada**.
+4. **Ruas** — via principal curva do portão à praça, anel logo dentro da muralha, e becos
+   por subdivisão recursiva com o corte perto do meio, mas nunca no meio.
+5. **Lotes** — cada quarteirão vira uma ou duas fileiras de testadas de largura variada.
+   Duas quando é fundo, que é como uma quadra real funciona: fundos encostados, cada
+   fachada olhando a sua própria rua.
+6. **Prédios** — o lote empilha peças do kit conforme o tipo. Taverna e ferraria são
+   atribuídas primeiro, aos lotes mais perto da praça; o resto é sorteado com o peso
+   corrigido pela distância ao centro, e é assim que o celeiro vai para a periferia sem um
+   único `if tipo == ...`.
+7. **Props e interiores** — poço e bancas na praça, lanternas nas ruas, cercas e varais nos
+   becos; dois interiores de verdade e cartas escuras atrás das outras janelas.
+
+A ordem com a estrada é o que mais custou a acertar, e o código explica no lugar:
+
+- **A cidade terraplena antes de a estrada ser traçada.** Ao contrário, o platô desceria
+  sobre um leito já cravado.
+- **A estrada para de cravar o terreno na muralha.** Ela desce da borda do vale com
+  inclinação limitada, então chega à planície ainda alta; como aqui o terreno é que se
+  ajusta à estrada, ela erguia o leito para a própria cota — e o leito passava por dentro
+  da cidade. Medido na seed 123: platô a 19,1 m e uma crista de estrada de 32,8 m
+  atravessando a praça. Dentro da muralha quem manda é a via principal, que é traçado e
+  não terraplenagem.
+- **O portão lê a curva da estrada, não o campo de distância.** Consequência do item
+  anterior: dentro da muralha o campo devolve "sem estrada", todas as arestas empatam e o
+  portão sai nas costas da cidade. O relatório entregou o defeito com um `portão a
+  1000000,0 m da estrada`.
+
+Otimização é parte da geração, não um passe depois:
+
+- **Peça igual vira instância.** Toda cópia de `wall` da cidade mora num `MultiMesh` só, e
+  o tom de cada prédio viaja na instância — tom não custa material.
+- **Colisão é sempre caixa.** Um prédio é uma caixa; um prédio com interior de verdade são
+  quatro, uma por parede, e a da frente fica de fora para não fechar a porta.
+- **Muralha e fachada grande são occluder**, por corte de área: uma casa de 4 m esconde
+  pouco e custa um teste.
+- **Piso só onde é visto.** `floor_tile` custa 48 triângulos, mais que as duas paredes que
+  o cercam. Ladrilhar todos os prédios gastava um terço do orçamento em chão que ninguém
+  pisa.
+
+`make city` prova a fase em número, e `make city SEED=123` gera uma cidade só.
+
 ---
 
 ## Estrutura
@@ -271,6 +330,8 @@ zero, e cobra estrada, navegação e ponto de nascimento em cada vale.
   preview.py        orquestra os renders, o catálogo e as capturas
   valley.gd         gera cada seed num processo só e mede o vale (Godot)
   valley.py         roda valley.gd e cobra os critérios de aceite do vale
+  city.gd           gera cada cidade, valida a navegação e captura 6 pontos (Godot)
+  city.py           roda city.gd e cobra os critérios de aceite da cidade
   bench.py          roda bench.gd e traduz falha de ambiente
 /generators         geração em GDScript (runtime)
   mesh_builder.gd   ArrayMesh flat + vertex color; valida orçamento de tris
@@ -279,6 +340,9 @@ zero, e cobra estrada, navegação e ponto de nascimento em cada vale.
   terrain_gen.gd    ruído em camadas, borda, planície, erosão e malha colorida
   road_gen.gd       traçado por spline, nivelamento e terraplenagem do leito
   scatter_gen.gd    vegetação e rochas em MultiMesh, com máscara e 3 LODs
+  city_layout.gd    a cidade como dado: sítio, muralha, ruas, lotes, prédios, marcadores
+  city_gen.gd       o traçado em sete etapas isoladas, sem tocar na árvore de cena
+  city_builder.gd   empilha o kit, agrupa em MultiMesh, colide por caixa e ocluis
   world_generator.gd   monta o mundo sob a raiz da cena
 /scenes             cenas — quase vazias por construção
 /scripts
@@ -302,6 +366,7 @@ zero, e cobra estrada, navegação e ponto de nascimento em cada vale.
   anim/             tiras de quadros da locomoção (derivado)
   player/           tira do controle do jogador (derivado)
   valley/           vista aérea de cada seed, uma sobre a outra (derivado)
+  shots/city/       seis pontos da cidade (derivado)
   bench_history.csv VERSIONADO: uma linha por execução de `make bench`
 ```
 
@@ -480,7 +545,7 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    percorre uma rota fixa e acumula `docs/bench_history.csv`. Nenhuma fase fecha sem os
    dois.
 
-4. **Terreno e mundo** ✅ *(esta etapa)*
+4. **Terreno e mundo** ✅
    O vale de 512 m inteiro por seed: ruído em camadas com borda, planície e erosão
    térmica em `terrain_gen.gd`; estrada por spline que nivela o terreno sob si em
    `road_gen.gd`; vegetação e rochas em `MultiMesh` com máscara de estrada e três LODs
@@ -504,9 +569,14 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    Paredes, portas, janelas, telhados e escadas gerados no grid de 2 m. Prédios montados
    por composição, dentro do teto de tris por categoria.
 
-8. **Cidade**
-   Layout urbano procedural: grafo de ruas, quadras, praça, muralha. Agrupamento por
-   quadra e occluders para segurar os 200 draw calls. `NavigationRegion3D` gerada.
+8. **Cidade** ✅ *(esta etapa, fora de ordem e a pedido explícito)*
+   Layout urbano procedural em sete etapas: sítio medido, muralha irregular com portão
+   voltado para a estrada, rede de ruas por subdivisão, lotes de testada variada, prédios
+   empilhados do kit por tipo, props e dois interiores reais. `MultiMesh` por peça,
+   colisão por caixa, occluders por área, `Marker3D` nomeados para a fase 10 e validação
+   que reprova sobreposição, porta inalcançável e beco sem saída. `make city SEED=123`.
+   *As fases 5 e 7 continuam abertas: a cidade foi construída sobre o kit de 34 peças da
+   fase 2, e não sobre um kit modular ampliado.*
 
 9. **Interiores e props**
    Interiores gerados por planta, mobiliário procedural, iluminação interna dentro do
@@ -538,7 +608,7 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 
 **Nenhuma fase está concluída sem `make preview` e `make bench` rodados, com os números
 colados no commit** — mais o alvo de medição que a fase tenha criado (`make anim`,
-`make playtest`, `make valley`). Não é cerimônia. Um gerador não tem como saber se o que ele produziu
+`make playtest`, `make valley`, `make city`). Não é cerimônia. Um gerador não tem como saber se o que ele produziu
 parece certo, e uma contagem de triângulos dentro do orçamento não impede uma árvore de
 sair torta ou um chão de sumir por winding invertido — as duas coisas já aconteceram
 neste projeto e foram encontradas *olhando*, não lendo log.
@@ -570,6 +640,15 @@ neste projeto e foram encontradas *olhando*, não lendo log.
 - a maior inclinação da estrada **no terreno construído**, contra `ROAD_MAX_SLOPE`;
 - a fração do vale que a malha de navegação cobre, e a folga do ponto de nascimento;
 - `docs/valley/seeds.png`, com os dois vales do mesmo ponto de câmera.
+
+`make city` responde "é habitável?":
+
+- prédios, lotes e ruas por seed, e quantas peças em quantos nós de desenho;
+- draw calls e triângulos **na praça**, que é o pior ângulo da cidade;
+- quantas portas o navmesh alcança **com caminho saindo da praça** — perguntar só se há
+  navegação perto da porta aprovaria uma casa murada dentro de um quarteirão fechado;
+- becos sem saída não intencionais, que têm de ser zero;
+- `docs/shots/city/*.png`, seis pontos que respondem o que número nenhum responde.
 
 `make bench` responde "cabe?":
 

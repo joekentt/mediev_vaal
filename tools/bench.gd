@@ -84,6 +84,7 @@ func _run() -> void:
 		var now_usec: int = Time.get_ticks_usec()
 		var sample: Dictionary = Metrics.sample(root)
 		sample["frame_ms"] = float(now_usec - previous_usec) / USEC_PER_MS
+		sample["in_city"] = _in_city()
 		previous_usec = now_usec
 		_samples.append(sample)
 		elapsed += float(sample["frame_ms"])
@@ -154,6 +155,13 @@ func _summarize(elapsed_ms: float) -> Dictionary:
 		"frame_ms_avg": average_ms,
 		"frame_ms_worst": worst_ms,
 		"draw_calls": Metrics.peak(_samples, "draw_calls"),
+		# O pico de campo aberto é medido **só nos quadros de campo aberto**. A rota fixa
+		# passa dentro da cidade desde a fase 8, e cobrar o teto de campo aberto num quadro
+		# com uma cidade inteira em cena mede a coisa errada: o orçamento sempre teve dois
+		# tetos, e o que faltava era a rota saber em qual dos dois estava.
+		"draw_calls_wilderness": _peak_where("draw_calls", false),
+		"draw_calls_city": _peak_where("draw_calls", true),
+		"city_frames": _count_where(true),
 		"triangles": Metrics.peak(_samples, "triangles"),
 		"objects": Metrics.peak(_samples, "objects"),
 		"physics_ms": Metrics.average(_samples, "physics_ms"),
@@ -161,8 +169,45 @@ func _summarize(elapsed_ms: float) -> Dictionary:
 		"memory_mb": float(_samples[count - 1]["memory_mb"]),
 		"materials_loaded": int(_samples[count - 1]["materials_loaded"]),
 	}
-	summary["violations"] = Metrics.check_budget(summary, &"draw_calls_wilderness")
+	# Cada região contra o seu próprio teto. O resumo guarda o pico geral em `draw_calls`
+	# para o histórico continuar comparável linha a linha.
+	var wilderness: Dictionary = summary.duplicate()
+	wilderness["draw_calls"] = summary["draw_calls_wilderness"]
+	var violations: Array[String] = Metrics.check_budget(wilderness, &"draw_calls_wilderness")
+
+	if int(summary["city_frames"]) > 0:
+		var city: Dictionary = summary.duplicate()
+		city["draw_calls"] = summary["draw_calls_city"]
+		for problem: String in Metrics.check_budget(city, &"draw_calls_city"):
+			if not violations.has(problem):
+				violations.append(problem)
+	summary["violations"] = violations
 	return summary
+
+
+## A câmera está dentro da cidade neste quadro?
+func _in_city() -> bool:
+	var layout: CityLayout = WorldGenerator.last_city
+	if layout == null:
+		return false
+	var spot: Vector3 = _camera.global_position
+	return Vector2(spot.x, spot.z).distance_to(layout.center) < Params.CITY_RADIUS
+
+
+func _peak_where(key: String, in_city: bool) -> int:
+	var highest: int = 0
+	for sample: Dictionary in _samples:
+		if bool(sample["in_city"]) == in_city:
+			highest = maxi(highest, int(sample[key]))
+	return highest
+
+
+func _count_where(in_city: bool) -> int:
+	var total: int = 0
+	for sample: Dictionary in _samples:
+		if bool(sample["in_city"]) == in_city:
+			total += 1
+	return total
 
 
 func _write_json(report: Dictionary) -> void:

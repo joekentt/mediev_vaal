@@ -15,7 +15,7 @@ GODOT ?= godot
 BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest valley bench clean regen help
+.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest valley city bench clean regen help
 
 ## Regenera tudo e verifica. É o alvo que precisa passar antes de qualquer commit.
 all: params project materials gaits player assets characters audio world verify
@@ -109,6 +109,12 @@ valley:
 	@echo "== valley =="
 	@GODOT=$(GODOT) $(PY) -m tools.valley
 
+## Gera as cidades de prova, valida cada uma e captura 6 pontos em docs/shots/city/.
+## `make city SEED=123` gera só aquela seed. Precisa do Godot com display.
+city:
+	@echo "== city =="
+	@GODOT=$(GODOT) $(PY) -m tools.city $(SEED)
+
 ## Percorre a rota fixa, mede, e acrescenta uma linha a docs/bench_history.csv.
 ## Precisa do Godot com display.
 bench:
@@ -145,6 +151,7 @@ help:
 	@echo "  make preview  renders do kit + catálogo + capturas da cena"
 	@echo "  make anim     tiras de quadros da locomoção (precisa do Godot)"
 	@echo "  make playtest dirige o jogador e mede o controle (precisa do Godot)"
+	@echo "  make city     gera 3 cidades, valida e captura 6 pontos (precisa do Godot)"
 	@echo "  make valley   compara dois vales por seed (precisa do Godot)"
 	@echo "  make bench    mede a rota fixa e acumula docs/bench_history.csv"
 	@echo "  make clean    apaga o derivado"

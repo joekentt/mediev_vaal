@@ -264,12 +264,19 @@ func _difference(a: PackedFloat32Array, b: PackedFloat32Array) -> float:
 ## Caso nulo: a mesma seed, gerada de novo, tem de dar o mesmo vale.
 ##
 ## Só o campo de altura é reconstruído — nem malha, nem espalhamento, nem navegação. O que
-## está em prova é o caminho ruído → planície → erosão → estrada, que é de onde qualquer
-## diferença poderia vir. Montar o mundo de novo custaria minutos e não provaria mais nada.
+## está em prova é o caminho ruído → planície → erosão → terraplenagem → estrada, que é de
+## onde qualquer diferença poderia vir. Montar o mundo de novo custaria minutos e não
+## provaria mais nada.
+##
+## A terraplenagem da cidade entra aqui **porque ela mexe no relevo**. Reconstruir só ruído
+## e estrada comparava um vale sem cidade com um vale com cidade, e o caso nulo acusava
+## 0,83% de diferença numa geração que é determinística — um falso positivo que teria
+## mandado procurar não-determinismo onde não havia.
 func _null_difference(reference: PackedFloat32Array) -> float:
 	var world_seed: int = Params.VALLEY_SEEDS[0]
 	var field: HeightField = TerrainGenerator.build_field(world_seed)
-	RoadGenerator.carve(field, world_seed)
+	var layout: CityLayout = CityGenerator.plan(field, world_seed)
+	RoadGenerator.carve(field, world_seed, layout)
 	return _difference(reference, _sample_heights(field))
 
 
