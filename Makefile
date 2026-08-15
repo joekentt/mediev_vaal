@@ -15,10 +15,10 @@ GODOT ?= godot
 BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project materials gaits assets test-assets characters audio world verify warnings preview anim bench clean regen help
+.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest bench clean regen help
 
 ## Regenera tudo e verifica. É o alvo que precisa passar antes de qualquer commit.
-all: params project materials gaits assets characters audio world verify
+all: params project materials gaits player assets characters audio world verify
 	@echo "== pronto: projeto regenerado e verificado =="
 
 ## scripts/core/params.gd a partir de tools/params.py.
@@ -35,6 +35,11 @@ project:
 gaits:
 	@echo "== gaits =="
 	@$(PY) -m tools.gen_gaits
+
+## Cena do jogador: corpo, colisor, aplicador de povo, locomoção e braço de câmera.
+player:
+	@echo "== player =="
+	@$(PY) -m tools.gen_player
 
 ## Biblioteca de materiais do Godot em assets/generated/materials/.
 materials:
@@ -90,6 +95,13 @@ anim:
 	@echo "== anim =="
 	@GODOT=$(GODOT) $(PY) -m tools.anim
 
+## Dirige o jogador por uma sequência fixa numa arena com paredes e mede: velocidades
+## atingidas, altura do salto, janela de coyote time e distância da câmera à parede.
+## Precisa do Godot com display.
+playtest:
+	@echo "== playtest =="
+	@GODOT=$(GODOT) $(PY) -m tools.playtest
+
 ## Percorre a rota fixa, mede, e acrescenta uma linha a docs/bench_history.csv.
 ## Precisa do Godot com display.
 bench:
@@ -101,7 +113,7 @@ clean:
 	@echo "== clean =="
 	@rm -rf assets/generated
 	@rm -rf .godot
-	@rm -rf docs/assets docs/shots docs/anim docs/assets.html docs/bench.json
+	@rm -rf docs/assets docs/shots docs/anim docs/player docs/assets.html docs/bench.json
 	@find tools -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 	@echo "  derivado removido (docs/bench_history.csv é versionado e fica)"
 
@@ -115,6 +127,7 @@ help:
 	@echo "  make project  project.godot"
 	@echo "  make materials biblioteca de materiais do Godot"
 	@echo "  make gaits    perfis de marcha em resources/gaits/"
+	@echo "  make player   cena do jogador em scenes/player/"
 	@echo "  make assets   fábrica de peças no Blender (precisa do Blender)"
 	@echo "  make test-assets prova determinismo e orçamento do kit"
 	@echo "  make characters humanoides rigados (precisa do Blender)"
@@ -124,6 +137,7 @@ help:
 	@echo "  make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)"
 	@echo "  make preview  renders do kit + catálogo + capturas da cena"
 	@echo "  make anim     tiras de quadros da locomoção (precisa do Godot)"
+	@echo "  make playtest dirige o jogador e mede o controle (precisa do Godot)"
 	@echo "  make bench    mede a rota fixa e acumula docs/bench_history.csv"
 	@echo "  make clean    apaga o derivado"
 	@echo "  make regen    clean + all"

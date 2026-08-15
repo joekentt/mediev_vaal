@@ -87,6 +87,7 @@ const FLOOR_HEIGHT: float = 3.5
 const DOOR_WIDTH: float = 1.2
 const DOOR_HEIGHT: float = 2.2
 const STREET_WIDTH: float = 6
+const WALL_THICKNESS: float = 0.25
 
 # --- Estágio (cena vazia da fase 1) ------------------------------------------
 
@@ -202,6 +203,58 @@ const WORLD_SEED: int = 20250107
 const BENCH_WARMUP_FRAMES: int = 30
 const BENCH_SAMPLE_FRAMES: int = 240
 const SCREENSHOT_WAIT_FRAMES: int = 10
+
+# --- Jogador -----------------------------------------------------------------
+
+const PLAYER_SCENE: String = "res://scenes/player/player.tscn"
+const PLAYER_BODY: StringName = &"aldeao"
+const PLAYER_WALK_SPEED: float = 3.2
+const PLAYER_RUN_SPEED: float = 6
+const PLAYER_ACCELERATION: float = 12
+const PLAYER_DECELERATION: float = 16
+const PLAYER_AIR_CONTROL: float = 0.35
+const PLAYER_TURN_SPEED: float = 12
+const PLAYER_JUMP_HEIGHT: float = 1.15
+const PLAYER_GRAVITY: float = 22
+const PLAYER_FALL_GRAVITY_SCALE: float = 1.4
+const PLAYER_TERMINAL_VELOCITY: float = 32
+const PLAYER_COYOTE_TIME: float = 0.12
+const PLAYER_JUMP_BUFFER: float = 0.12
+const PLAYER_CAPSULE_RADIUS: float = 0.3
+const PLAYER_FLOOR_MAX_ANGLE_DEG: float = 46
+const PLAYER_FLOOR_SNAP: float = 0.35
+const PLAYER_INTERACT_RANGE: float = 2.4
+
+# --- Câmera de terceira pessoa -----------------------------------------------
+
+const CAMERA_DISTANCE: float = 4.2
+const CAMERA_DISTANCE_MIN: float = 1.8
+const CAMERA_DISTANCE_MAX: float = 7.5
+const CAMERA_ZOOM_STEP: float = 0.45
+const CAMERA_TARGET_HEIGHT: float = 0.86
+const CAMERA_PITCH_MIN_DEG: float = -60
+const CAMERA_PITCH_MAX_DEG: float = 35
+const CAMERA_START_PITCH_DEG: float = -12
+const CAMERA_SPRING_MARGIN: float = 0.28
+const CAMERA_PROBE_RADIUS: float = 0.22
+const CAMERA_FOLLOW_LAG: float = 11
+const CAMERA_FOV: float = 70
+const CAMERA_FOV_RUN_BONUS: float = 4
+const CAMERA_FOV_LERP: float = 4.5
+const CAMERA_SHAKE_AMPLITUDE: float = 0.055
+const CAMERA_SHAKE_DECAY: float = 7
+const CAMERA_SHAKE_FREQUENCY: float = 24
+const CAMERA_SHAKE_MIN_FALL: float = 5
+const CAMERA_SHAKE_MAX_FALL: float = 18
+
+# --- Prova do controlador ----------------------------------------------------
+
+const PLAYTEST_DIR: String = "res://docs/player"
+const PLAYTEST_ARENA_RADIUS: float = 14
+const PLAYTEST_LEDGE_OFFSET: Vector2 = Vector2(3, 0)
+const PLAYTEST_LEDGE_HEIGHT: float = 1.6
+const PLAYTEST_SETTLE_FRAMES: int = 12
+const PLAYTEST_TOLERANCE: float = 0.08
 
 # --- Locomoção procedural ----------------------------------------------------
 
@@ -340,6 +393,7 @@ const ANIM_STATE_FRAMES: int = 40
 const ANIM_INTERACT_REACH: Vector3 = Vector3(0.22, 0.72, -0.34)
 const ANIM_LOOK_AT: Vector3 = Vector3(-2.4, 1.5, 1.2)
 const CHARACTER_DIR: String = "res://assets/generated/characters"
+const KIT_DIR: String = "res://assets/generated/kit"
 
 # --- Olhos: capturas e benchmark ---------------------------------------------
 

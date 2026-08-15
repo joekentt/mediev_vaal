@@ -101,7 +101,7 @@ func _run() -> void:
 func _build_stage() -> void:
 	_stage = Node3D.new()
 	root.add_child(_stage)
-	WorldGenerator.build_stage(_stage)
+	WorldGenerator.build_stage(_stage, false)
 	# A câmera do estágio existe para a captura do mundo; aqui a tira tem a sua própria,
 	# dentro de um SubViewport de tamanho fixo. Depender da janela do sistema faria o
 	# tamanho do quadro mudar com a resolução de quem rodou.

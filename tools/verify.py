@@ -24,7 +24,8 @@ import json
 import re
 from pathlib import Path
 
-from . import gen_audio, gen_gaits, gen_materials, gen_params, gen_project, gen_world
+from . import gen_audio, gen_gaits, gen_materials, gen_params, gen_player, gen_project
+from . import gen_world
 from . import params as P
 from .util import ROOT
 
@@ -70,6 +71,7 @@ def check_drift() -> None:
         gen_params.OUTPUT: gen_params.render(),
         gen_project.OUTPUT: gen_project.render(),
         gen_world.MAIN_SCENE_OUTPUT: gen_world._main_scene(),
+        gen_player.OUTPUT: gen_player._scene(),
         gen_world.MANIFEST_OUTPUT: gen_world._manifest(),
     }
     for name, (color_key, roughness, metallic) in P.MATERIALS.items():

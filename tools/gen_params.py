@@ -143,6 +143,7 @@ const FLOOR_HEIGHT: float = {P.num(P.FLOOR_HEIGHT)}
 const DOOR_WIDTH: float = {P.num(P.DOOR_WIDTH)}
 const DOOR_HEIGHT: float = {P.num(P.DOOR_HEIGHT)}
 const STREET_WIDTH: float = {P.num(P.STREET_WIDTH)}
+const WALL_THICKNESS: float = {P.num(P.WALL_THICKNESS)}
 
 # --- Estágio (cena vazia da fase 1) ------------------------------------------
 
@@ -230,6 +231,58 @@ const WORLD_SEED: int = {P.WORLD_SEED}
 const BENCH_WARMUP_FRAMES: int = {P.BENCH_WARMUP_FRAMES}
 const BENCH_SAMPLE_FRAMES: int = {P.BENCH_SAMPLE_FRAMES}
 const SCREENSHOT_WAIT_FRAMES: int = {P.SCREENSHOT_WAIT_FRAMES}
+
+# --- Jogador -----------------------------------------------------------------
+
+const PLAYER_SCENE: String = "res://{P.PLAYER_SCENE}"
+const PLAYER_BODY: StringName = &"{P.PLAYER_BODY}"
+const PLAYER_WALK_SPEED: float = {P.num(P.PLAYER_WALK_SPEED)}
+const PLAYER_RUN_SPEED: float = {P.num(P.PLAYER_RUN_SPEED)}
+const PLAYER_ACCELERATION: float = {P.num(P.PLAYER_ACCELERATION)}
+const PLAYER_DECELERATION: float = {P.num(P.PLAYER_DECELERATION)}
+const PLAYER_AIR_CONTROL: float = {P.num(P.PLAYER_AIR_CONTROL)}
+const PLAYER_TURN_SPEED: float = {P.num(P.PLAYER_TURN_SPEED)}
+const PLAYER_JUMP_HEIGHT: float = {P.num(P.PLAYER_JUMP_HEIGHT)}
+const PLAYER_GRAVITY: float = {P.num(P.PLAYER_GRAVITY)}
+const PLAYER_FALL_GRAVITY_SCALE: float = {P.num(P.PLAYER_FALL_GRAVITY_SCALE)}
+const PLAYER_TERMINAL_VELOCITY: float = {P.num(P.PLAYER_TERMINAL_VELOCITY)}
+const PLAYER_COYOTE_TIME: float = {P.num(P.PLAYER_COYOTE_TIME)}
+const PLAYER_JUMP_BUFFER: float = {P.num(P.PLAYER_JUMP_BUFFER)}
+const PLAYER_CAPSULE_RADIUS: float = {P.num(P.PLAYER_CAPSULE_RADIUS)}
+const PLAYER_FLOOR_MAX_ANGLE_DEG: float = {P.num(P.PLAYER_FLOOR_MAX_ANGLE_DEG)}
+const PLAYER_FLOOR_SNAP: float = {P.num(P.PLAYER_FLOOR_SNAP)}
+const PLAYER_INTERACT_RANGE: float = {P.num(P.PLAYER_INTERACT_RANGE)}
+
+# --- Câmera de terceira pessoa -----------------------------------------------
+
+const CAMERA_DISTANCE: float = {P.num(P.CAMERA_DISTANCE)}
+const CAMERA_DISTANCE_MIN: float = {P.num(P.CAMERA_DISTANCE_MIN)}
+const CAMERA_DISTANCE_MAX: float = {P.num(P.CAMERA_DISTANCE_MAX)}
+const CAMERA_ZOOM_STEP: float = {P.num(P.CAMERA_ZOOM_STEP)}
+const CAMERA_TARGET_HEIGHT: float = {P.num(P.CAMERA_TARGET_HEIGHT)}
+const CAMERA_PITCH_MIN_DEG: float = {P.num(P.CAMERA_PITCH_MIN_DEG)}
+const CAMERA_PITCH_MAX_DEG: float = {P.num(P.CAMERA_PITCH_MAX_DEG)}
+const CAMERA_START_PITCH_DEG: float = {P.num(P.CAMERA_START_PITCH_DEG)}
+const CAMERA_SPRING_MARGIN: float = {P.num(P.CAMERA_SPRING_MARGIN)}
+const CAMERA_PROBE_RADIUS: float = {P.num(P.CAMERA_PROBE_RADIUS)}
+const CAMERA_FOLLOW_LAG: float = {P.num(P.CAMERA_FOLLOW_LAG)}
+const CAMERA_FOV: float = {P.num(P.CAMERA_FOV)}
+const CAMERA_FOV_RUN_BONUS: float = {P.num(P.CAMERA_FOV_RUN_BONUS)}
+const CAMERA_FOV_LERP: float = {P.num(P.CAMERA_FOV_LERP)}
+const CAMERA_SHAKE_AMPLITUDE: float = {P.num(P.CAMERA_SHAKE_AMPLITUDE)}
+const CAMERA_SHAKE_DECAY: float = {P.num(P.CAMERA_SHAKE_DECAY)}
+const CAMERA_SHAKE_FREQUENCY: float = {P.num(P.CAMERA_SHAKE_FREQUENCY)}
+const CAMERA_SHAKE_MIN_FALL: float = {P.num(P.CAMERA_SHAKE_MIN_FALL)}
+const CAMERA_SHAKE_MAX_FALL: float = {P.num(P.CAMERA_SHAKE_MAX_FALL)}
+
+# --- Prova do controlador ----------------------------------------------------
+
+const PLAYTEST_DIR: String = "res://{P.PLAYTEST_DIR}"
+const PLAYTEST_ARENA_RADIUS: float = {P.num(P.PLAYTEST_ARENA_RADIUS)}
+const PLAYTEST_LEDGE_OFFSET: Vector2 = Vector2({P.num(P.PLAYTEST_LEDGE_OFFSET[0])}, {P.num(P.PLAYTEST_LEDGE_OFFSET[1])})
+const PLAYTEST_LEDGE_HEIGHT: float = {P.num(P.PLAYTEST_LEDGE_HEIGHT)}
+const PLAYTEST_SETTLE_FRAMES: int = {P.PLAYTEST_SETTLE_FRAMES}
+const PLAYTEST_TOLERANCE: float = {P.num(P.PLAYTEST_TOLERANCE)}
 
 # --- Locomoção procedural ----------------------------------------------------
 
@@ -321,6 +374,7 @@ const ANIM_STATE_FRAMES: int = {P.ANIM_STATE_FRAMES}
 const ANIM_INTERACT_REACH: Vector3 = {_vec3(P.ANIM_INTERACT_REACH)}
 const ANIM_LOOK_AT: Vector3 = {_vec3(P.ANIM_LOOK_AT)}
 const CHARACTER_DIR: String = "res://{P.CHARACTER_DIR}"
+const KIT_DIR: String = "res://{P.KIT_DIR}"
 
 # --- Olhos: capturas e benchmark ---------------------------------------------
 

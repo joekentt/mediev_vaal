@@ -243,6 +243,21 @@ SUN_CURVE = 0.2
 # ---------------------------------------------------------------------------
 # Ordem define o bit: índice 0 -> layer 1.
 
+def layer_mask(*names: str) -> int:
+    """Máscara de bits das camadas de física citadas pelo nome.
+
+    Escrever `collision_layer = 2` num `.tscn` gerado funcionaria e seria exatamente o
+    tipo de número que ninguém consegue conferir depois. Aqui o gerador diz `player` e o
+    bit sai de `PHYSICS_LAYERS` — reordenar as camadas continua correto sozinho.
+    """
+    mask = 0
+    for name in names:
+        if name not in PHYSICS_LAYERS:
+            raise KeyError(f"Camada de física inexistente: {name!r}")
+        mask |= 1 << PHYSICS_LAYERS.index(name)
+    return mask
+
+
 PHYSICS_LAYERS: tuple[str, ...] = (
     "world",
     "player",
@@ -451,6 +466,92 @@ CHARACTER_ROSTER: tuple[dict, ...] = (
      "torso": 1.00, "head": 1.00, "posture": "ereto",   "beard": False,
      "ears": "humana",  "hair": "curto", "clothing": "nenhuma"},
 )
+
+# ---------------------------------------------------------------------------
+# Jogador e câmera
+# ---------------------------------------------------------------------------
+# Sensação de peso é o assunto desta seção inteira. Um corpo que atinge a velocidade
+# máxima no primeiro frame e para no frame seguinte controla-se com precisão e não
+# convence ninguém; a aceleração e a desaceleração separadas são o que dá massa. Desacelerar
+# mais rápido do que acelerar (16 contra 12) é deliberado: soltar o comando tem de ser
+# nítido, senão o personagem parece patinar no gelo toda vez que se quer parar numa marca.
+
+PLAYER_SCENE = "scenes/player/player.tscn"
+PLAYER_BODY = "aldeao"          # qual corpo do elenco o jogador veste
+
+PLAYER_WALK_SPEED = 3.2         # m/s
+PLAYER_RUN_SPEED = 6.0          # m/s
+PLAYER_ACCELERATION = 12.0      # m/s²
+PLAYER_DECELERATION = 16.0      # m/s²
+PLAYER_AIR_CONTROL = 0.35       # fração da aceleração enquanto sem apoio
+PLAYER_TURN_SPEED = 12.0        # 1/s, do `lerp_angle` que gira o corpo
+
+# Salto em altura, e não em velocidade inicial: `v = sqrt(2·g·h)` deixa o número em
+# metros, que é o que dá para conferir olhando um degrau.
+PLAYER_JUMP_HEIGHT = 1.15       # m
+PLAYER_GRAVITY = 22.0           # m/s², bem acima dos 9,8 reais — salto de jogo é seco
+PLAYER_FALL_GRAVITY_SCALE = 1.4 # cair mais rápido que subir tira a flutuação do topo
+PLAYER_TERMINAL_VELOCITY = 32.0 # m/s
+
+# Coyote time: o intervalo em que ainda dá para pular *depois* de sair da beirada. Sem
+# ele, todo pulo na quina falha e o jogador culpa o controle — corretamente.
+PLAYER_COYOTE_TIME = 0.12       # s
+# O espelho do coyote: apertar pulo pouco antes de tocar o chão continua valendo.
+PLAYER_JUMP_BUFFER = 0.12       # s
+
+PLAYER_CAPSULE_RADIUS = 0.30    # m
+PLAYER_FLOOR_MAX_ANGLE_DEG = 46.0
+PLAYER_FLOOR_SNAP = 0.35        # m — mantém o corpo colado em rampa e degrau
+PLAYER_INTERACT_RANGE = 2.4     # m à frente onde o braço procura algo
+
+# --- Câmera de terceira pessoa ----------------------------------------------
+# O braço é um `SpringArm3D`: ele encurta sozinho quando há geometria entre o alvo e a
+# câmera. É por isso que a câmera não atravessa parede — não é tuning, é o nó fazendo
+# uma varredura de forma a cada frame.
+
+CAMERA_DISTANCE = 4.2           # m, comprimento em repouso do braço
+CAMERA_DISTANCE_MIN = 1.8
+CAMERA_DISTANCE_MAX = 7.5
+CAMERA_ZOOM_STEP = 0.45         # m por clique da roda
+CAMERA_TARGET_HEIGHT = 0.86     # fração da altura do corpo: onde o braço se prende
+CAMERA_PITCH_MIN_DEG = -60.0    # olhando para baixo
+CAMERA_PITCH_MAX_DEG = 35.0     # olhando para cima
+CAMERA_START_PITCH_DEG = -12.0
+CAMERA_SPRING_MARGIN = 0.28     # folga da varredura, para a câmera não encostar na parede
+# Raio da esfera que o braço varre. **Não é decorativo**: com `shape` nulo o SpringArm3D
+# do Godot cai num raycast, e nesse caminho a `margin` é ignorada — medido. A lente para
+# exatamente na superfície do muro e o near plane entra na pedra. Com esfera, o que
+# mantém a lente afastada é este raio.
+CAMERA_PROBE_RADIUS = 0.22      # m
+
+# Atraso posicional: a plataforma segue o corpo com mola, e não presa a ele. Preso, todo
+# tranco do personagem vira tranco de câmera; com atraso, o corpo se move dentro do
+# quadro e o movimento ganha peso.
+CAMERA_FOLLOW_LAG = 11.0        # 1/s
+CAMERA_FOV = 70.0
+CAMERA_FOV_RUN_BONUS = 4.0      # graus a mais correndo — o clássico "está mais rápido"
+CAMERA_FOV_LERP = 4.5           # 1/s
+
+# Tranco de aterrissagem. Curto e vertical: sacudir a câmera em três eixos por um pulo
+# normal enjoa em dois minutos de jogo.
+CAMERA_SHAKE_AMPLITUDE = 0.055  # m no impacto mais forte
+CAMERA_SHAKE_DECAY = 7.0        # 1/s
+CAMERA_SHAKE_FREQUENCY = 24.0   # Hz
+CAMERA_SHAKE_MIN_FALL = 5.0     # m/s de queda abaixo dos quais não há tranco
+CAMERA_SHAKE_MAX_FALL = 18.0    # m/s onde o tranco satura
+
+# --- Prova do controlador ----------------------------------------------------
+PLAYTEST_DIR = "docs/player"
+# Raio do anel de muros. Tem de caber a corrida inteira: a 6 m/s por 1,4 s o corpo anda
+# 8,4 m, e um anel menor faria a prova medir a parede em vez da velocidade.
+PLAYTEST_ARENA_RADIUS = 14.0    # m
+PLAYTEST_LEDGE_HEIGHT = 1.6     # m, a plataforma de onde se testa o coyote time
+# Onde a plataforma fica, em múltiplos do grid. Fora do eixo de caminhada de propósito:
+# na primeira versão ela ficava à frente, o corpo esbarrava nela no meio da tomada e a
+# prova reportou 0,00 m/s de velocidade — parecia um controlador quebrado.
+PLAYTEST_LEDGE_OFFSET = (3.0, 0.0)
+PLAYTEST_SETTLE_FRAMES = 12
+PLAYTEST_TOLERANCE = 0.08       # fração: quanto a velocidade medida pode ficar do alvo
 
 # ---------------------------------------------------------------------------
 # Locomoção procedural

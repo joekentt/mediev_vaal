@@ -26,6 +26,7 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `assets/generated/characters/*.glb` + manifesto | `tools/gen_characters.py` (Blender) | `tools/params.py` |
 | `assets/generated/audio/*` | `tools/gen_audio.py` | `tools/params.py` |
 | `resources/gaits/*.tres` | `tools/gen_gaits.py` | `tools/params.py` |
+| `scenes/player/player.tscn` | `tools/gen_player.py` | `tools/params.py` |
 | `scenes/world/main.tscn` | `tools/gen_world.py` | `tools/params.py` |
 | Céu, sol, chão, colisão, câmera | `generators/world_generator.gd` | `Params` |
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
@@ -33,6 +34,7 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
 | `docs/bench.json` + histórico | `tools/bench.gd` | `Params.BENCH_ROUTE` |
 | `docs/anim/*.png` | `tools/anim_preview.gd` | `Params.GAIT_PROFILES` |
+| `docs/player/controle.png` + medidas | `tools/playtest.gd` | `Params.PLAYER_*` |
 
 Consequências práticas:
 
@@ -63,6 +65,7 @@ make params   scripts/core/params.gd
 make project  project.godot
 make materials  biblioteca de materiais do Godot
 make gaits    perfis de marcha em resources/gaits/
+make player   cena do jogador em scenes/player/
 make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
 make test-assets prova determinismo, paleta, orçamento e rig (precisa do Blender)
 make characters 7 humanoides rigados em .glb + manifesto    (precisa do Blender)
@@ -72,6 +75,7 @@ make verify   cobra a regra inegociável
 make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)
 make preview  renders do kit + docs/assets.html + capturas da cena
 make anim     tiras de quadros da locomoção em docs/anim/  (precisa do Godot)
+make playtest dirige o jogador e mede o controle          (precisa do Godot)
 make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
@@ -206,6 +210,9 @@ chegou à malha.
   kit_*.py          as 34 peças paramétricas (arquitetura, props, natureza)
   gen_characters.py humanoides rigados: corpo, esqueleto Mixamo, skinning e prova de pose
   gen_gaits.py      perfis de marcha por postura, em resources/gaits/
+  gen_player.py     scenes/player/player.tscn: corpo, colisor, locomoção e câmera
+  playtest.gd       dirige o jogador pelo input map e mede o controle (Godot)
+  playtest.py       roda playtest.gd e cobra os critérios de aceite do controle
   anim_preview.gd   tiras de quadros da locomoção + medida de deslizamento (Godot)
   anim.py           roda anim_preview.gd e reprova o build se o pé patinar
   test_assets.py    prova determinismo, paleta, orçamento e rig
@@ -227,6 +234,9 @@ chegou à malha.
     procedural_locomotion.gd  marcha, corrida, salto e camadas aditivas por IK
     two_bone_ik.gd            solver analítico de duas juntas
     gait_profile.gd           Resource de marcha, um por postura
+    player_controller.gd      máquina de estados, peso, coyote time e buffer de salto
+    third_person_camera.gd    braço de mola com colisão, atraso, FOV e tranco de pouso
+    race_applier.gd           veste um corpo: malha, marcha e dimensão do colisor
   ai/               comportamento de NPC
   ui/               telas e widgets
 /resources          dados de design gerados (raças, diálogos, itens), versionados
@@ -237,6 +247,7 @@ chegou à malha.
 /docs               documentação do pipeline
   assets.html       catálogo visual do kit (derivado)
   anim/             tiras de quadros da locomoção (derivado)
+  player/           tira do controle do jogador (derivado)
   bench_history.csv VERSIONADO: uma linha por execução de `make bench`
 ```
 
@@ -417,13 +428,12 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    `TimeSystem` passa a mover o sol, a cor do céu e a névoa. Iluminação por período,
    sem custo por frame além da interpolação.
 
-6. **Jogador e câmera** — *animação adiantada*
-   A **locomoção** já existe: `scripts/gameplay/procedural_locomotion.gd` faz marcha,
-   corrida, salto, sentar, carregar, interagir e as camadas aditivas por IK, fora de
-   ordem e a pedido explícito. O que resta desta fase é o controle: `CharacterBody3D`
-   gerado, entrada de teclado e gamepad, câmera de terceira pessoa com colisão contra o
-   cenário e captura de mouse. O nó de locomoção já publica o `camera_offset` que essa
-   câmera vai somar.
+6. **Jogador e câmera** ✅
+   `scenes/player/player.tscn` gerada por `tools/gen_player.py`: `CharacterBody3D`,
+   cápsula, `RaceApplier`, locomoção procedural e braço de câmera. Máquina de estados
+   (IDLE, WALK, RUN, JUMP, FALL, INTERACT), aceleração e desaceleração separadas, coyote
+   time e buffer de salto, câmera de terceira pessoa com `SpringArm3D`, atraso posicional,
+   FOV de corrida e tranco de pouso. `make playtest` dirige tudo pelo input map e mede.
 
 7. **Kit modular de arquitetura**
    Paredes, portas, janelas, telhados e escadas gerados no grid de 2 m. Prédios montados
@@ -478,6 +488,14 @@ neste projeto e foram encontradas *olhando*, não lendo log.
 - `docs/anim/*.png` com o ciclo de caminhada, corrida e salto quadro a quadro;
 - o desvio do pé apoiado em metros, que é o critério "o pé não desliza" em número;
 - `docs/anim/marchas.png`, com três posturas andando lado a lado.
+
+`make playtest` responde "controla bem?":
+
+- velocidade estabilizada andando e correndo, contra o alvo de `params.py`;
+- tempo até 90% da velocidade — a sensação de peso em segundos;
+- altura do salto, e se o coyote time aceita um pulo *depois* da beirada;
+- a menor folga da lente numa órbita completa encostado num muro. Negativa é a câmera
+  dentro da parede, que é o critério de aceite em número.
 
 `make bench` responde "cabe?":
 

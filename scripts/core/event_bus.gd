@@ -36,6 +36,10 @@ signal interactable_focused(interactable: Node3D)
 @warning_ignore("unused_signal")
 signal interaction_requested(interactable: Node3D)
 
+## O jogador trocou de estado de movimento (ver `PlayerController.State`).
+@warning_ignore("unused_signal")
+signal player_state_changed(state: int)
+
 ## O jogador cruzou a fronteira de uma célula de streaming.
 @warning_ignore("unused_signal")
 signal player_moved_to_cell(cell: Vector2i)

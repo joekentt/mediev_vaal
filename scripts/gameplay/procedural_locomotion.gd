@@ -149,21 +149,38 @@ var pose_usec: int = 0
 
 
 func _ready() -> void:
+	# Silêncio quando não há esqueleto ainda, e não é desleixo: um `RaceApplier` monta o
+	# corpo em `_ready`, e não há ordem de irmãos que garanta que ele venha antes deste
+	# nó. Quem monta chama `bind()` depois — e é `bind()` que reclama alto se falhar.
+	if _resolve_skeleton() != null:
+		bind()
+
+
+## Prende o nó ao esqueleto que estiver abaixo do pai e mede o rig.
+##
+## Chame depois de trocar o corpo. Devolve `false` e reclama alto quando não há esqueleto
+## ou quando faltam ossos do padrão Mixamo — os dois casos deixariam o personagem em
+## T-pose, que é o tipo de defeito que se atribui a "a animação ainda não está pronta".
+func bind() -> bool:
 	_skeleton = _resolve_skeleton()
 	if _skeleton == null:
 		push_error("ProceduralLocomotion: nenhum Skeleton3D encontrado sob %s." % get_path())
+		_ready_to_pose = false
 		set_physics_process(false)
-		return
+		return false
+
 	if profile == null:
-		profile = GaitProfile.from_posture(&"ereto")
+		profile = GaitProfile.from_posture(GaitProfile.DEFAULT_POSTURE)
 	_ready_to_pose = _measure_rig()
+	set_physics_process(_ready_to_pose)
 	if not _ready_to_pose:
-		set_physics_process(false)
-		return
+		return false
+
 	_phase = phase_offset
 	_reset_plants()
 	if _state == State.SITTING:
 		_seat_feet()
+	return true
 
 
 ## Velocidade imposta por um controlador que já a conhece (um `CharacterBody3D`, por

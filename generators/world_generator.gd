@@ -13,6 +13,7 @@ extends RefCounted
 const STAGE_ROOT_NAME: StringName = &"Stage"
 const GROUND_MATERIAL: StringName = &"ground"
 const GROUND_MESH_CATEGORY: StringName = &"stage_ground"
+const PLAYER_NODE_NAME: StringName = &"Player"
 
 const TONEMAP_LINEAR: String = "linear"
 const TONEMAP_REINHARDT: String = "reinhardt"
@@ -22,7 +23,11 @@ const TONEMAP_ACES: String = "aces"
 
 ## Constrói o estágio inteiro sob `root`, substituindo o que já estiver lá.
 ## Devolve o nó raiz do estágio.
-static func build_stage(root: Node3D) -> Node3D:
+##
+## `with_player` desligado dá o estágio sem ninguém dentro — é o que as provas visuais
+## querem: `anim_preview` põe o próprio corpo e `playtest` a própria arena, e um jogador
+## extra apareceria no meio do quadro de ambos.
+static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	var previous: Node = root.get_node_or_null(NodePath(STAGE_ROOT_NAME))
 	if previous != null:
 		root.remove_child(previous)
@@ -35,6 +40,13 @@ static func build_stage(root: Node3D) -> Node3D:
 	stage.add_child(build_environment())
 	stage.add_child(build_sun())
 	stage.add_child(build_ground())
+	if with_player:
+		var player: Node3D = build_player()
+		if player != null:
+			stage.add_child(player)
+			return stage
+	# Sem jogador — ou sem a cena dele gerada — vale a câmera fixa da fase 1, para o
+	# estágio não abrir preto e o motivo ficar visível no console.
 	stage.add_child(build_camera())
 	return stage
 
@@ -145,7 +157,23 @@ static func build_ground_mesh() -> ArrayMesh:
 	return builder.commit(GROUND_MESH_CATEGORY)
 
 
-## Câmera fixa da fase 1. A câmera de terceira pessoa entra na fase 2.
+## Instancia o jogador gerado. Devolve `null` quando a cena ainda não existe.
+static func build_player() -> Node3D:
+	if not ResourceLoader.exists(Params.PLAYER_SCENE):
+		push_warning(
+			"Cena do jogador ausente (%s). Rode `make player`." % Params.PLAYER_SCENE
+		)
+		return null
+	var packed: PackedScene = ResourceLoader.load(Params.PLAYER_SCENE) as PackedScene
+	if packed == null:
+		return null
+	var player: Node3D = packed.instantiate() as Node3D
+	player.name = PLAYER_NODE_NAME
+	player.position = Vector3.ZERO
+	return player
+
+
+## Câmera fixa da fase 1, usada só quando não há jogador na cena.
 static func build_camera() -> Camera3D:
 	var camera: Camera3D = Camera3D.new()
 	camera.name = "Camera3D"
