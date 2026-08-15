@@ -110,7 +110,7 @@ func _run() -> void:
 func _build_arena() -> void:
 	_stage = Node3D.new()
 	root.add_child(_stage)
-	WorldGenerator.build_stage(_stage, false)
+	WorldGenerator.build_flat_stage(_stage)
 	var stage_camera: Camera3D = _stage.get_node_or_null("Stage/Camera3D") as Camera3D
 	if stage_camera != null:
 		stage_camera.current = false

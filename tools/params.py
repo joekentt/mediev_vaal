@@ -67,6 +67,11 @@ PALETTE: dict[str, str] = {
     "fog":            "#BAAF95",
     # Neutros de trabalho
     "ground_default": "#78746A",
+    # Branco puro: a base do material dos proxies de LOD. `vertex_color_use_as_albedo`
+    # multiplica o albedo pela cor do vértice, então só um albedo branco deixa a cor média
+    # da peça atravessar intacta. Qualquer outra cor tingiria o proxy — e um proxy de rocha
+    # com material de folhagem sai verde a 200 m.
+    "proxy_neutral":  "#FFFFFF",
     "debug_magenta":  "#FF00AA",
 }
 
@@ -84,6 +89,10 @@ MATERIALS: dict[str, tuple[str, float, float]] = {
     "cloth":     ("cloth_cream",    0.95, 0.0),
     "water":     ("water",          0.15, 0.0),
     "ground":    ("ground_default", 0.95, 0.0),
+    # Um material para todos os proxies de LOD, de qualquer tipo. A cor vem do vertex
+    # color; o material só existe para o proxy não nascer com o branco padrão do Godot,
+    # que ignora vertex color e pintava o vale inteiro de cones claros além de 92 m.
+    "proxy":     ("proxy_neutral",  1.00, 0.0),
     "debug":     ("debug_magenta",  1.00, 0.0),
 }
 
@@ -187,7 +196,12 @@ BUDGET: dict[str, int] = {
 
 # Teto de triângulos por categoria de malha gerada. Os geradores validam contra isto.
 TRI_BUDGET: dict[str, int] = {
-    "terrain_chunk":    900,
+    # Renegociado nesta fase: 900 → 2100, junto com TERRAIN_CHUNK_CELLS de 16 para 32.
+    # O teto antigo servia a pedaços de 64 m, que davam 64 pedaços no vale — 64 draw calls
+    # de terreno, medidos, contra um teto de 140 para o mundo inteiro. Pedaço de 128 m dá
+    # 16, com o mesmo total de triângulos: o que se perde é granularidade de culling, e num
+    # vale de 512 m em que quase tudo está no campo de visão ela não estava pagando por si.
+    "terrain_chunk":    2_100,
     "building_small":   300,
     "building_large":   900,
     "city_block":       4_000,
@@ -225,14 +239,25 @@ SHADOW_FILTER_QUALITY = 3       # 0=hard .. 5=ultra; 3 = "soft medium"
 DIRECTIONAL_SHADOW_SIZE = 4096
 POSITIONAL_SHADOW_ATLAS_SIZE = 2048
 SHADOW_MAX_DISTANCE = 120.0
+# Cascatas da sombra direcional: "orthogonal" (1), "2_splits" ou "4_splits".
+# Cada cascata redesenha todo caster dentro de SHADOW_MAX_DISTANCE, então o número de
+# cascatas multiplica draw calls de sombra. O padrão do Godot são 4; num vale low poly com
+# 120 m de alcance, 2 cascatas de 2048² não mostram diferença que o olho pegue e devolvem
+# a folga que faltava no orçamento — medido: 141 draw calls com 4 cascatas, 90 com 2, para
+# um teto de 140. Era a sombra, e não a geometria, que estava estourando o orçamento.
+SHADOW_DIRECTIONAL_SPLITS = "2_splits"
 PHYSICS_TICKS_PER_SECOND = 60
 VSYNC_MODE = 1                  # 0=off, 1=on
 
 # Ambiente do estágio.
-FOG_DENSITY = 0.004
+# A névoa foi calibrada para o estágio plano, onde nada ficava a mais de 60 m. Num vale de
+# 512 m, 0,004 punha 53% de névoa a 200 m e a borda oposta sumia num copo de leite — o
+# oposto de "névoa leve". A 0,0015 a encosta em frente ainda tem cor, a borda do vale a
+# 250 m recebe cerca de um terço de névoa, e a profundidade continua legível.
+FOG_DENSITY = 0.0015
 FOG_SKY_AFFECT = 0.0
 AMBIENT_SKY_CONTRIBUTION = 0.7
-TONEMAP_MODE = "aces"           # linear | reinhardt | filmic | aces
+TONEMAP_MODE = "filmic"         # linear | reinhardt | filmic | aces
 TONEMAP_WHITE = 6.0
 SKY_CURVE = 0.12
 SUN_ANGLE_MAX = 18.0
@@ -466,6 +491,143 @@ CHARACTER_ROSTER: tuple[dict, ...] = (
      "torso": 1.00, "head": 1.00, "posture": "ereto",   "beard": False,
      "ears": "humana",  "hair": "curto", "clothing": "nenhuma"},
 )
+
+# ---------------------------------------------------------------------------
+# Vale: terreno, estrada, vegetação e navegação
+# ---------------------------------------------------------------------------
+# O vale inteiro sai de uma seed. Não há heightmap em disco, não há mapa desenhado: a
+# altura de cada ponto é função do ruído, e o resto — cor, estrada, vegetação, navegação —
+# é função da altura. Trocar a seed troca o vale; trocar um número daqui muda todos os
+# vales de uma vez.
+
+TERRAIN_SIZE = 512.0            # m de lado. O "~500 x 500" do escopo, em potência de dois
+TERRAIN_CELL = 4.0              # m por célula do heightmap
+TERRAIN_CHUNK_CELLS = 32        # células por lado de um pedaço de malha (128 m)
+TERRAIN_HEIGHT = 46.0           # amplitude total do relevo, em metros
+
+# Ruído em camadas. A base dá as montanhas; o detalhe quebra a silhueta lisa que o ruído
+# fractal puro produz e que faz todo terreno procedural parecer o mesmo terreno.
+TERRAIN_BASE_FREQUENCY = 0.0016
+TERRAIN_BASE_OCTAVES = 5
+TERRAIN_BASE_LACUNARITY = 2.05
+TERRAIN_BASE_GAIN = 0.47
+TERRAIN_DETAIL_FREQUENCY = 0.011
+TERRAIN_DETAIL_OCTAVES = 3
+TERRAIN_DETAIL_WEIGHT = 0.10    # fração da amplitude que cabe ao detalhe
+# Expoente aplicado à altura normalizada. Acima de 1 aprofunda os fundos de vale e deixa
+# os picos escassos — é o que separa "vale" de "colina ondulada por toda parte".
+TERRAIN_VALLEY_POWER = 1.55
+# Borda: o relevo sobe nas quatro margens para fechar o vale, em vez de terminar num
+# penhasco reto. Fração do meio-lado onde a subida começa.
+TERRAIN_RIM_START = 0.62
+TERRAIN_RIM_HEIGHT = 0.55       # fração de TERRAIN_HEIGHT somada na borda extrema
+
+# Erosão térmica simplificada: material acima do ângulo de talude escorrega para o vizinho
+# mais baixo. Não é hidráulica — não há água nem sedimento — mas é o que corta as encostas
+# impossíveis do ruído cru e dá aos vales o fundo plano que a estrada e a cidade precisam.
+TERRAIN_EROSION_PASSES = 6
+TERRAIN_TALUS = 0.62            # diferença máxima de altura entre vizinhos, em metros
+TERRAIN_EROSION_RATE = 0.45     # fração do excesso movida por passe
+
+# A planície onde a cidade vai nascer (fase 8). Um disco achatado com transição suave.
+TERRAIN_PLAIN_CENTER = (0.0, 0.0)   # em metros, relativo ao centro do vale
+# Quanto a praça desliza do centro conforme a seed. Não é enfeite: com a praça sempre no
+# meio, uma boa parte do mapa fica idêntica entre duas seeds — a planície e a transição em
+# volta dela somam 230 m dos 512 —, e a prova de "vales diferentes" mede justamente isso.
+# Além do número, o centro fixo é o tipo de simetria que entrega o mundo como procedural.
+TERRAIN_PLAIN_WANDER = 84.0
+TERRAIN_PLAIN_RADIUS = 62.0
+TERRAIN_PLAIN_FALLOFF = 54.0    # m de transição entre a planície e o relevo
+TERRAIN_PLAIN_FLATNESS = 0.94   # 1,0 = mesa perfeita; abaixo disso sobra ondulação
+
+# Cor por altitude e inclinação. O declive manda: encosta íngreme é rocha em qualquer
+# altura, porque é onde a terra não se segura.
+TERRAIN_SLOPE_ROCK = 0.60       # seno da inclinação a partir do qual vira rocha
+TERRAIN_SLOPE_DIRT = 0.34       # ... e a partir do qual a grama dá lugar à terra
+TERRAIN_ALTITUDE_ROCK = 0.72    # fração da altura total onde a rocha domina de qualquer jeito
+TERRAIN_ALTITUDE_GRASS = 0.46   # acima disto a grama começa a rarear
+TERRAIN_TONE_JITTER = 0.05      # variação de tom por triângulo, para a malha não ficar chapada
+
+# --- Estrada ----------------------------------------------------------------
+# A estrada é a única coisa do vale desenhada por uma curva, e não por ruído. Ela liga a
+# borda à planície da cidade, e o terreno se ajusta a ela — não o contrário.
+
+ROAD_WIDTH = 6.0                # m de leito plano
+ROAD_SHOULDER = 5.0             # m de transição de cada lado, onde o corte se dissolve
+ROAD_MAX_SLOPE = 0.11           # tangente máxima: ~6,3°, o que uma carroça sobe
+# Folga entre a inclinação de *projeto* e a de *aceite*. O nivelamento trabalha no perfil
+# da curva, amostrado a cada 1,2 m; quem tem de respeitar o limite é o terreno, que é uma
+# grade de 4 m. Um vértice do leito herda a altura do eixo no ponto em que se projeta, e a
+# leitura bilinear entre quatro vértices que se projetam em lugares diferentes não devolve
+# a rampa exata — devolve uma média que dobra onde o perfil dobra. Medido: com projeto a
+# 0,11 o terreno chegava a 0,125. Projetar abaixo do limite é o que uma estrada de verdade
+# faz; o aceite continua sendo cobrado no relevo construído, em ROAD_MAX_SLOPE.
+ROAD_GRADE_MARGIN = 0.03
+ROAD_SAMPLES = 220              # pontos amostrados ao longo da curva
+ROAD_SMOOTH_PASSES = 40         # suavizações do perfil de altura antes de cravar a estrada
+ROAD_CONTROL_POINTS = 5         # vértices do traçado, entre a borda e a praça
+ROAD_WANDER = 78.0              # m de desvio lateral máximo por vértice — o que torce a estrada
+ROAD_ENTRY_MARGIN = 12.0        # m para dentro da borda onde a estrada começa
+# Raio de achatamento total, em células do heightmap. O leito tem 6 m e a célula tem 4:
+# achatar só a largura do leito deixa os cantos da célula meio puxados, e a interpolação
+# bilinear ao longo do eixo mistura vértice cravado com vértice solto. O resultado é uma
+# estrada que respeita a inclinação no papel e a estoura no terreno — foi medido em 0,126
+# contra um limite de 0,11. Um raio de célula e meia garante os quatro cantos cravados.
+ROAD_BED_CELLS = 1.5
+
+# --- Vegetação e rochas ------------------------------------------------------
+# Espalhamento determinístico: mesma seed, mesmas árvores. Cada tipo tem a sua própria
+# sequência, então acrescentar um tipo novo não desloca os que já existiam.
+#
+# (peça do kit, densidade por hectare, inclinação máxima, faixa de altitude, escala)
+SCATTER_TILE = 128.0            # m de lado do bloco de espalhamento; a LOD é por bloco
+SCATTER_JITTER = 0.42           # deslocamento aleatório dentro da célula, como fração
+SCATTER_TYPES: tuple[dict, ...] = (
+    {"part": "tree_broadleaf", "density": 34.0, "max_slope": 0.42,
+     "altitude": (0.04, 0.55), "scale": (0.85, 1.35), "far": True},
+    {"part": "tree_conifer",   "density": 26.0, "max_slope": 0.52,
+     "altitude": (0.34, 0.86), "scale": (0.80, 1.40), "far": True},
+    {"part": "bush",           "density": 55.0, "max_slope": 0.46,
+     "altitude": (0.02, 0.62), "scale": (0.70, 1.30), "far": False},
+    {"part": "grass_tuft",     "density": 210.0, "max_slope": 0.30,
+     "altitude": (0.00, 0.50), "scale": (0.60, 1.20), "far": False},
+    {"part": "rock",           "density": 30.0, "max_slope": 0.95,
+     "altitude": (0.10, 1.00), "scale": (0.70, 1.80), "far": True},
+)
+# Distância livre da estrada onde nada nasce. Meio leito mais o acostamento já bastaria;
+# a folga extra evita arbusto encostado na roda.
+SCATTER_ROAD_CLEARANCE = 3.0    # m além do acostamento
+
+# Três faixas de LOD, em metros, e a sobreposição em que uma dissolve na outra. A faixa
+# mais distante só recebe os tipos marcados com `far`: tufo de grama a 200 m é um pixel
+# que custa um draw call.
+SCATTER_LOD_BANDS = (92.0, 210.0, 340.0)
+SCATTER_LOD_FADE = 18.0         # m de sobreposição entre faixas
+SCATTER_LOD_THINNING = (1.0, 0.62, 0.28)  # fração das instâncias em cada faixa
+# Proxy de LOD: prisma que substitui a peça de perto. Lados por faixa — a peça original
+# tem dezenas de triângulos, o proxy tem oito.
+SCATTER_PROXY_SIDES = (0, 6, 4) # 0 = usa a malha de verdade
+SCATTER_PROXY_TAPER = 0.35      # quanto o topo do prisma afina, como fração da base
+
+# --- Navegação ---------------------------------------------------------------
+# A malha de navegação é assada ao fim da geração, numa thread. Assar 512 m em célula fina
+# travaria o jogo por segundos no `_ready`; a célula grossa perde detalhe que um NPC
+# andando em terreno aberto não usa.
+NAV_CELL_SIZE = 1.0             # m
+NAV_CELL_HEIGHT = 0.4
+NAV_AGENT_RADIUS = 0.5
+NAV_AGENT_HEIGHT = 1.9
+NAV_AGENT_MAX_CLIMB = 0.5
+NAV_AGENT_MAX_SLOPE_DEG = 42.0
+NAV_GROUP = "navsource"         # grupo que o assador varre
+
+# --- Prova do vale -----------------------------------------------------------
+VALLEY_DIR = "docs/valley"
+# Duas seeds que a prova compara. Se os dois vales saírem parecidos, a seed não está
+# chegando ao relevo e o critério de aceite falhou — mesmo com os dois jogáveis.
+VALLEY_SEEDS = (123, 777)
+VALLEY_MIN_DIFFERENCE = 0.12    # diferença média de altura, como fração da amplitude
+VALLEY_MIN_WALKABLE = 0.35      # fração do vale que a navegação tem de cobrir
 
 # ---------------------------------------------------------------------------
 # Jogador e câmera
@@ -774,22 +936,26 @@ PREVIEW_LIGHTS: tuple[tuple[str, float, float, float], ...] = (
 
 # Pontos de câmera nomeados para `tools/godot_shot.gd`: (nome, posição, alvo).
 SHOT_POINTS: tuple[tuple[str, tuple[float, float, float], tuple[float, float, float]], ...] = (
-    ("wide",    (0.0, 12.0, 26.0),  (0.0, 0.0, 0.0)),
-    ("eye",     (0.0, 1.7, 9.0),    (0.0, 1.6, 0.0)),
-    ("top",     (0.0, 40.0, 0.1),   (0.0, 0.0, 0.0)),
-    ("horizon", (18.0, 2.2, 18.0),  (0.0, 1.0, 0.0)),
+    ("vale",    (0.0, 88.0, 190.0),  (0.0, 8.0, -20.0)),
+    ("praca",   (0.0, 16.0, 62.0),   (0.0, 4.0, 0.0)),
+    ("estrada", (-40.0, 12.0, 120.0), (0.0, 4.0, 40.0)),
+    ("encosta", (150.0, 46.0, 150.0), (40.0, 10.0, 40.0)),
 )
 
 # Rota fixa do benchmark: a câmera percorre estes pontos em ordem, em ciclo. Fixa de
 # propósito — medir um passeio diferente a cada execução tornaria o histórico ruído.
+# A rota atravessa o vale, e não mais o estágio vazio: sai da planície da cidade, sobe a
+# encosta e volta. Alturas são um piso — `bench.gd` levanta a câmera até o relevo, porque
+# uma rota fixa num vale que muda com a seed enterraria a câmera na montanha.
 BENCH_ROUTE: tuple[tuple[float, float, float], ...] = (
-    (0.0, 1.7, 20.0),
-    (20.0, 1.7, 20.0),
-    (20.0, 8.0, -20.0),
-    (-20.0, 3.0, -20.0),
-    (-20.0, 1.7, 20.0),
+    (0.0, 3.0, 0.0),
+    (90.0, 3.0, 70.0),
+    (170.0, 3.0, -60.0),
+    (-40.0, 3.0, -170.0),
+    (-160.0, 3.0, 40.0),
 )
-BENCH_ROUTE_SECONDS = 8.0                # duração de uma volta completa
+BENCH_ROUTE_SECONDS = 14.0               # duração de uma volta completa
+BENCH_CAMERA_CLEARANCE = 2.4             # m acima do relevo em que a câmera do bench voa
 BENCH_LOW_PERCENTILE = 1.0               # "1% low": pior 1% dos frames
 
 # ---------------------------------------------------------------------------

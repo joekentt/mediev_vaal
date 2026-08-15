@@ -58,6 +58,7 @@ const PALETTE: Dictionary = {
 	&"sun":             Color(1.0, 0.941176, 0.854902, 1),
 	&"fog":             Color(0.729412, 0.686275, 0.584314, 1),
 	&"ground_default":  Color(0.470588, 0.454902, 0.415686, 1),
+	&"proxy_neutral":   Color(1.0, 1.0, 1.0, 1),
 	&"debug_magenta":   Color(1.0, 0.0, 0.666667, 1),
 }
 
@@ -73,6 +74,7 @@ const MATERIALS: Dictionary = {
 	&"cloth":    {"color": &"cloth_cream", "roughness": 0.95, "metallic": 0},
 	&"water":    {"color": &"water", "roughness": 0.15, "metallic": 0},
 	&"ground":   {"color": &"ground_default", "roughness": 0.95, "metallic": 0},
+	&"proxy":    {"color": &"proxy_neutral", "roughness": 1, "metallic": 0},
 	&"debug":    {"color": &"debug_magenta", "roughness": 1, "metallic": 0},
 }
 
@@ -124,7 +126,7 @@ const BUDGET: Dictionary = {
 
 ## Teto de triângulos por categoria de malha gerada.
 const TRI_BUDGET: Dictionary = {
-	&"terrain_chunk":     900,
+	&"terrain_chunk":     2100,
 	&"building_small":    300,
 	&"building_large":    900,
 	&"city_block":        4000,
@@ -141,10 +143,11 @@ const TRI_BUDGET: Dictionary = {
 # --- Render ------------------------------------------------------------------
 
 const SHADOW_MAX_DISTANCE: float = 120
-const FOG_DENSITY: float = 0.004
+const SHADOW_DIRECTIONAL_SPLITS: String = "2_splits"
+const FOG_DENSITY: float = 0.0015
 const FOG_SKY_AFFECT: float = 0
 const AMBIENT_SKY_CONTRIBUTION: float = 0.7
-const TONEMAP_MODE: String = "aces"
+const TONEMAP_MODE: String = "filmic"
 const TONEMAP_WHITE: float = 6
 const SKY_CURVE: float = 0.12
 const SUN_ANGLE_MAX: float = 18
@@ -203,6 +206,88 @@ const WORLD_SEED: int = 20250107
 const BENCH_WARMUP_FRAMES: int = 30
 const BENCH_SAMPLE_FRAMES: int = 240
 const SCREENSHOT_WAIT_FRAMES: int = 10
+
+# --- Vale: terreno -----------------------------------------------------------
+
+const TERRAIN_SIZE: float = 512
+const TERRAIN_CELL: float = 4
+const TERRAIN_CHUNK_CELLS: int = 32
+const TERRAIN_HEIGHT: float = 46
+const TERRAIN_BASE_FREQUENCY: float = 0.0016
+const TERRAIN_BASE_OCTAVES: int = 5
+const TERRAIN_BASE_LACUNARITY: float = 2.05
+const TERRAIN_BASE_GAIN: float = 0.47
+const TERRAIN_DETAIL_FREQUENCY: float = 0.011
+const TERRAIN_DETAIL_OCTAVES: int = 3
+const TERRAIN_DETAIL_WEIGHT: float = 0.1
+const TERRAIN_VALLEY_POWER: float = 1.55
+const TERRAIN_RIM_START: float = 0.62
+const TERRAIN_RIM_HEIGHT: float = 0.55
+const TERRAIN_EROSION_PASSES: int = 6
+const TERRAIN_TALUS: float = 0.62
+const TERRAIN_EROSION_RATE: float = 0.45
+const TERRAIN_PLAIN_CENTER: Vector2 = Vector2(0, 0)
+const TERRAIN_PLAIN_WANDER: float = 84
+const TERRAIN_PLAIN_RADIUS: float = 62
+const TERRAIN_PLAIN_FALLOFF: float = 54
+const TERRAIN_PLAIN_FLATNESS: float = 0.94
+const TERRAIN_SLOPE_ROCK: float = 0.6
+const TERRAIN_SLOPE_DIRT: float = 0.34
+const TERRAIN_ALTITUDE_ROCK: float = 0.72
+const TERRAIN_ALTITUDE_GRASS: float = 0.46
+const TERRAIN_TONE_JITTER: float = 0.05
+
+# --- Vale: estrada -----------------------------------------------------------
+
+const ROAD_WIDTH: float = 6
+const ROAD_SHOULDER: float = 5
+const ROAD_MAX_SLOPE: float = 0.11
+const ROAD_GRADE_MARGIN: float = 0.03
+const ROAD_SAMPLES: int = 220
+const ROAD_SMOOTH_PASSES: int = 40
+const ROAD_CONTROL_POINTS: int = 5
+const ROAD_WANDER: float = 78
+const ROAD_ENTRY_MARGIN: float = 12
+const ROAD_BED_CELLS: float = 1.5
+
+# --- Vale: vegetação ---------------------------------------------------------
+
+const SCATTER_TILE: float = 128
+const SCATTER_JITTER: float = 0.42
+const SCATTER_ROAD_CLEARANCE: float = 3
+
+## Tipos espalhados pelo vale. Cada entrada vira um `MultiMeshInstance3D` por faixa de
+## LOD e por bloco — trocar a lista aqui muda a vegetação inteira.
+const SCATTER_TYPES: Array[Dictionary] = [
+	{"part": &"tree_broadleaf", "density": 34, "max_slope": 0.42, "altitude": Vector2(0.04, 0.55), "scale": Vector2(0.85, 1.35), "far": true},
+	{"part": &"tree_conifer", "density": 26, "max_slope": 0.52, "altitude": Vector2(0.34, 0.86), "scale": Vector2(0.8, 1.4), "far": true},
+	{"part": &"bush", "density": 55, "max_slope": 0.46, "altitude": Vector2(0.02, 0.62), "scale": Vector2(0.7, 1.3), "far": false},
+	{"part": &"grass_tuft", "density": 210, "max_slope": 0.3, "altitude": Vector2(0, 0.5), "scale": Vector2(0.6, 1.2), "far": false},
+	{"part": &"rock", "density": 30, "max_slope": 0.95, "altitude": Vector2(0.1, 1), "scale": Vector2(0.7, 1.8), "far": true},
+]
+
+const SCATTER_LOD_BANDS: Array[float] = [92, 210, 340]
+const SCATTER_LOD_FADE: float = 18
+const SCATTER_LOD_THINNING: Array[float] = [1, 0.62, 0.28]
+const SCATTER_PROXY_SIDES: Array[int] = [0, 6, 4]
+const SCATTER_PROXY_TAPER: float = 0.35
+
+# --- Vale: navegação ---------------------------------------------------------
+
+const NAV_CELL_SIZE: float = 1
+const NAV_CELL_HEIGHT: float = 0.4
+const NAV_AGENT_RADIUS: float = 0.5
+const NAV_AGENT_HEIGHT: float = 1.9
+const NAV_AGENT_MAX_CLIMB: float = 0.5
+const NAV_AGENT_MAX_SLOPE_DEG: float = 42
+const NAV_GROUP: StringName = &"navsource"
+
+# --- Vale: prova -------------------------------------------------------------
+
+const VALLEY_DIR: String = "res://docs/valley"
+const VALLEY_SEEDS: Array[int] = [123, 777]
+const VALLEY_MIN_DIFFERENCE: float = 0.12
+const VALLEY_MIN_WALKABLE: float = 0.35
 
 # --- Jogador -----------------------------------------------------------------
 
@@ -406,22 +491,23 @@ const BENCH_HISTORY: String = "res://docs/bench_history.csv"
 
 ## Pontos de câmera nomeados: [nome, posição, alvo].
 const SHOT_POINTS: Array = [
-	[&"wide", Vector3(0, 12, 26), Vector3(0, 0, 0)],
-	[&"eye", Vector3(0, 1.7, 9), Vector3(0, 1.6, 0)],
-	[&"top", Vector3(0, 40, 0.1), Vector3(0, 0, 0)],
-	[&"horizon", Vector3(18, 2.2, 18), Vector3(0, 1, 0)],
+	[&"vale", Vector3(0, 88, 190), Vector3(0, 8, -20)],
+	[&"praca", Vector3(0, 16, 62), Vector3(0, 4, 0)],
+	[&"estrada", Vector3(-40, 12, 120), Vector3(0, 4, 40)],
+	[&"encosta", Vector3(150, 46, 150), Vector3(40, 10, 40)],
 ]
 
 ## Rota fixa do benchmark. Fixa de propósito: um passeio diferente a cada execução
 ## tornaria o histórico ruído em vez de sinal.
 const BENCH_ROUTE: Array[Vector3] = [
-	Vector3(0, 1.7, 20),
-	Vector3(20, 1.7, 20),
-	Vector3(20, 8, -20),
-	Vector3(-20, 3, -20),
-	Vector3(-20, 1.7, 20),
+	Vector3(0, 3, 0),
+	Vector3(90, 3, 70),
+	Vector3(170, 3, -60),
+	Vector3(-40, 3, -170),
+	Vector3(-160, 3, 40),
 ]
-const BENCH_ROUTE_SECONDS: float = 8
+const BENCH_ROUTE_SECONDS: float = 14
+const BENCH_CAMERA_CLEARANCE: float = 2.4
 const BENCH_LOW_PERCENTILE: float = 1
 
 # --- Acesso ------------------------------------------------------------------

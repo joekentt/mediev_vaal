@@ -87,6 +87,26 @@ def _gait_profiles() -> str:
     return "\n".join(lines)
 
 
+def _floats(values) -> str:
+    return ", ".join(P.num(float(v)) for v in values)
+
+
+def _scatter_types() -> str:
+    """Tipos de espalhamento como dicionários tipados, um por linha."""
+    lines = []
+    for spec in P.SCATTER_TYPES:
+        low, high = spec["altitude"]
+        scale_low, scale_high = spec["scale"]
+        lines.append(
+            f'\t{{"part": &"{spec["part"]}", "density": {P.num(spec["density"])}, '
+            f'"max_slope": {P.num(spec["max_slope"])}, '
+            f'"altitude": Vector2({P.num(low)}, {P.num(high)}), '
+            f'"scale": Vector2({P.num(scale_low)}, {P.num(scale_high)}), '
+            f'"far": {"true" if spec["far"] else "false"}}},'
+        )
+    return "\n".join(lines)
+
+
 def _anim_comparison() -> str:
     return ", ".join(f'"{name}"' for name in P.ANIM_GAIT_COMPARISON)
 
@@ -178,6 +198,7 @@ const TRI_BUDGET: Dictionary = {{
 # --- Render ------------------------------------------------------------------
 
 const SHADOW_MAX_DISTANCE: float = {P.num(P.SHADOW_MAX_DISTANCE)}
+const SHADOW_DIRECTIONAL_SPLITS: String = "{P.SHADOW_DIRECTIONAL_SPLITS}"
 const FOG_DENSITY: float = {P.num(P.FOG_DENSITY)}
 const FOG_SKY_AFFECT: float = {P.num(P.FOG_SKY_AFFECT)}
 const AMBIENT_SKY_CONTRIBUTION: float = {P.num(P.AMBIENT_SKY_CONTRIBUTION)}
@@ -231,6 +252,84 @@ const WORLD_SEED: int = {P.WORLD_SEED}
 const BENCH_WARMUP_FRAMES: int = {P.BENCH_WARMUP_FRAMES}
 const BENCH_SAMPLE_FRAMES: int = {P.BENCH_SAMPLE_FRAMES}
 const SCREENSHOT_WAIT_FRAMES: int = {P.SCREENSHOT_WAIT_FRAMES}
+
+# --- Vale: terreno -----------------------------------------------------------
+
+const TERRAIN_SIZE: float = {P.num(P.TERRAIN_SIZE)}
+const TERRAIN_CELL: float = {P.num(P.TERRAIN_CELL)}
+const TERRAIN_CHUNK_CELLS: int = {P.TERRAIN_CHUNK_CELLS}
+const TERRAIN_HEIGHT: float = {P.num(P.TERRAIN_HEIGHT)}
+const TERRAIN_BASE_FREQUENCY: float = {P.num(P.TERRAIN_BASE_FREQUENCY)}
+const TERRAIN_BASE_OCTAVES: int = {P.TERRAIN_BASE_OCTAVES}
+const TERRAIN_BASE_LACUNARITY: float = {P.num(P.TERRAIN_BASE_LACUNARITY)}
+const TERRAIN_BASE_GAIN: float = {P.num(P.TERRAIN_BASE_GAIN)}
+const TERRAIN_DETAIL_FREQUENCY: float = {P.num(P.TERRAIN_DETAIL_FREQUENCY)}
+const TERRAIN_DETAIL_OCTAVES: int = {P.TERRAIN_DETAIL_OCTAVES}
+const TERRAIN_DETAIL_WEIGHT: float = {P.num(P.TERRAIN_DETAIL_WEIGHT)}
+const TERRAIN_VALLEY_POWER: float = {P.num(P.TERRAIN_VALLEY_POWER)}
+const TERRAIN_RIM_START: float = {P.num(P.TERRAIN_RIM_START)}
+const TERRAIN_RIM_HEIGHT: float = {P.num(P.TERRAIN_RIM_HEIGHT)}
+const TERRAIN_EROSION_PASSES: int = {P.TERRAIN_EROSION_PASSES}
+const TERRAIN_TALUS: float = {P.num(P.TERRAIN_TALUS)}
+const TERRAIN_EROSION_RATE: float = {P.num(P.TERRAIN_EROSION_RATE)}
+const TERRAIN_PLAIN_CENTER: Vector2 = Vector2({P.num(P.TERRAIN_PLAIN_CENTER[0])}, {P.num(P.TERRAIN_PLAIN_CENTER[1])})
+const TERRAIN_PLAIN_WANDER: float = {P.num(P.TERRAIN_PLAIN_WANDER)}
+const TERRAIN_PLAIN_RADIUS: float = {P.num(P.TERRAIN_PLAIN_RADIUS)}
+const TERRAIN_PLAIN_FALLOFF: float = {P.num(P.TERRAIN_PLAIN_FALLOFF)}
+const TERRAIN_PLAIN_FLATNESS: float = {P.num(P.TERRAIN_PLAIN_FLATNESS)}
+const TERRAIN_SLOPE_ROCK: float = {P.num(P.TERRAIN_SLOPE_ROCK)}
+const TERRAIN_SLOPE_DIRT: float = {P.num(P.TERRAIN_SLOPE_DIRT)}
+const TERRAIN_ALTITUDE_ROCK: float = {P.num(P.TERRAIN_ALTITUDE_ROCK)}
+const TERRAIN_ALTITUDE_GRASS: float = {P.num(P.TERRAIN_ALTITUDE_GRASS)}
+const TERRAIN_TONE_JITTER: float = {P.num(P.TERRAIN_TONE_JITTER)}
+
+# --- Vale: estrada -----------------------------------------------------------
+
+const ROAD_WIDTH: float = {P.num(P.ROAD_WIDTH)}
+const ROAD_SHOULDER: float = {P.num(P.ROAD_SHOULDER)}
+const ROAD_MAX_SLOPE: float = {P.num(P.ROAD_MAX_SLOPE)}
+const ROAD_GRADE_MARGIN: float = {P.num(P.ROAD_GRADE_MARGIN)}
+const ROAD_SAMPLES: int = {P.ROAD_SAMPLES}
+const ROAD_SMOOTH_PASSES: int = {P.ROAD_SMOOTH_PASSES}
+const ROAD_CONTROL_POINTS: int = {P.ROAD_CONTROL_POINTS}
+const ROAD_WANDER: float = {P.num(P.ROAD_WANDER)}
+const ROAD_ENTRY_MARGIN: float = {P.num(P.ROAD_ENTRY_MARGIN)}
+const ROAD_BED_CELLS: float = {P.num(P.ROAD_BED_CELLS)}
+
+# --- Vale: vegetação ---------------------------------------------------------
+
+const SCATTER_TILE: float = {P.num(P.SCATTER_TILE)}
+const SCATTER_JITTER: float = {P.num(P.SCATTER_JITTER)}
+const SCATTER_ROAD_CLEARANCE: float = {P.num(P.SCATTER_ROAD_CLEARANCE)}
+
+## Tipos espalhados pelo vale. Cada entrada vira um `MultiMeshInstance3D` por faixa de
+## LOD e por bloco — trocar a lista aqui muda a vegetação inteira.
+const SCATTER_TYPES: Array[Dictionary] = [
+{_scatter_types()}
+]
+
+const SCATTER_LOD_BANDS: Array[float] = [{_floats(P.SCATTER_LOD_BANDS)}]
+const SCATTER_LOD_FADE: float = {P.num(P.SCATTER_LOD_FADE)}
+const SCATTER_LOD_THINNING: Array[float] = [{_floats(P.SCATTER_LOD_THINNING)}]
+const SCATTER_PROXY_SIDES: Array[int] = [{", ".join(str(v) for v in P.SCATTER_PROXY_SIDES)}]
+const SCATTER_PROXY_TAPER: float = {P.num(P.SCATTER_PROXY_TAPER)}
+
+# --- Vale: navegação ---------------------------------------------------------
+
+const NAV_CELL_SIZE: float = {P.num(P.NAV_CELL_SIZE)}
+const NAV_CELL_HEIGHT: float = {P.num(P.NAV_CELL_HEIGHT)}
+const NAV_AGENT_RADIUS: float = {P.num(P.NAV_AGENT_RADIUS)}
+const NAV_AGENT_HEIGHT: float = {P.num(P.NAV_AGENT_HEIGHT)}
+const NAV_AGENT_MAX_CLIMB: float = {P.num(P.NAV_AGENT_MAX_CLIMB)}
+const NAV_AGENT_MAX_SLOPE_DEG: float = {P.num(P.NAV_AGENT_MAX_SLOPE_DEG)}
+const NAV_GROUP: StringName = &"{P.NAV_GROUP}"
+
+# --- Vale: prova -------------------------------------------------------------
+
+const VALLEY_DIR: String = "res://{P.VALLEY_DIR}"
+const VALLEY_SEEDS: Array[int] = [{", ".join(str(v) for v in P.VALLEY_SEEDS)}]
+const VALLEY_MIN_DIFFERENCE: float = {P.num(P.VALLEY_MIN_DIFFERENCE)}
+const VALLEY_MIN_WALKABLE: float = {P.num(P.VALLEY_MIN_WALKABLE)}
 
 # --- Jogador -----------------------------------------------------------------
 
@@ -396,6 +495,7 @@ const BENCH_ROUTE: Array[Vector3] = [
 {_bench_route()}
 ]
 const BENCH_ROUTE_SECONDS: float = {P.num(P.BENCH_ROUTE_SECONDS)}
+const BENCH_CAMERA_CLEARANCE: float = {P.num(P.BENCH_CAMERA_CLEARANCE)}
 const BENCH_LOW_PERCENTILE: float = {P.num(P.BENCH_LOW_PERCENTILE)}
 
 # --- Acesso ------------------------------------------------------------------

@@ -25,6 +25,8 @@ extends SceneTree
 const SCENE_PATH: String = "res://scenes/world/main.tscn"
 const HEADLESS_DISPLAY: String = "headless"
 const RESULT_PREFIX: String = "MEDIEV_BENCH "
+## Distância mínima entre a câmera e o alvo para o `look_at` ser bem definido.
+const MIN_LOOK_DISTANCE: float = 0.01
 const CSV_HEADER: String = (
 	"timestamp,scene,frames,fps_avg,fps_1pct_low,frame_ms_avg,frame_ms_worst,"
 	+ "draw_calls,triangles,objects,physics_ms,process_ms,memory_mb,violations"
@@ -103,9 +105,23 @@ func _move_camera(progress: float) -> void:
 	var next_index: int = (index + 1) % segments
 	var blend: float = position - floorf(position)
 
-	_camera.global_position = route[index].lerp(route[next_index], blend)
-	# Olhar sempre para o centro do estágio dá enquadramentos comparáveis entre corridas.
-	_camera.look_at(Vector3.ZERO, Vector3.UP)
+	var spot: Vector3 = route[index].lerp(route[next_index], blend)
+	# A rota é fixa mas o vale muda com a seed: a altura de cada ponto é um piso, e a
+	# câmera sobe até o relevo. Sem isto, trocar de seed enterraria a câmera dentro de uma
+	# montanha e o bench mediria a face interna de um triângulo.
+	var field: HeightField = WorldGenerator.last_field
+	if field != null:
+		var ground: float = field.height_at(spot.x, spot.z) + Params.BENCH_CAMERA_CLEARANCE
+		spot.y = maxf(spot.y, ground)
+	_camera.global_position = spot
+
+	# Olhar para o próximo ponto da rota, e não para o centro: num vale de 512 m o centro
+	# fica longe demais e metade da volta seria a mesma vista.
+	var ahead: Vector3 = route[next_index]
+	if field != null:
+		ahead.y = maxf(ahead.y, field.height_at(ahead.x, ahead.z))
+	if ahead.distance_to(spot) > MIN_LOOK_DISTANCE:
+		_camera.look_at(ahead, Vector3.UP)
 
 
 func _summarize(elapsed_ms: float) -> Dictionary:
@@ -128,6 +144,10 @@ func _summarize(elapsed_ms: float) -> Dictionary:
 
 	var summary: Dictionary = {
 		"scene": SCENE_PATH,
+		# A seed vai no relatório porque sem ela o histórico deixa de ser comparável: dois
+		# vales diferentes dão números diferentes, e a linha do CSV não diria por quê.
+		"seed": WorldGenerator.current_seed(),
+		"world": WorldGenerator.last_report,
 		"frames": count,
 		"fps_avg": Metrics.MS_PER_SEC / average_ms if average_ms > 0.0 else 0.0,
 		"fps_1pct_low": Metrics.MS_PER_SEC / low_ms if low_ms > 0.0 else 0.0,

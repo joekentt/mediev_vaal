@@ -72,7 +72,7 @@ def check_drift() -> None:
         gen_project.OUTPUT: gen_project.render(),
         gen_world.MAIN_SCENE_OUTPUT: gen_world._main_scene(),
         gen_player.OUTPUT: gen_player._scene(),
-        gen_world.MANIFEST_OUTPUT: gen_world._manifest(),
+        gen_world.MANIFEST_OUTPUT: gen_world._manifest(gen_world.current_seed()),
     }
     for name, (color_key, roughness, metallic) in P.MATERIALS.items():
         target = gen_materials.OUTPUT_DIR / f"{name}.tres"

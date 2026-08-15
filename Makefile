@@ -15,7 +15,7 @@ GODOT ?= godot
 BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest bench clean regen help
+.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest valley bench clean regen help
 
 ## Regenera tudo e verifica. É o alvo que precisa passar antes de qualquer commit.
 all: params project materials gaits player assets characters audio world verify
@@ -68,10 +68,11 @@ audio:
 	@echo "== audio =="
 	@$(PY) -m tools.gen_audio
 
-## Cenas e manifesto do mundo.
+## Cenas e manifesto do mundo. A seed vai para o manifesto e o jogo a lê de lá.
+## Uso: make world [SEED=123]
 world:
 	@echo "== world =="
-	@$(PY) -m tools.gen_world
+	@$(PY) -m tools.gen_world $(SEED)
 
 ## Cobra a regra inegociável: sem deriva, sem número mágico, tudo tipado.
 verify:
@@ -102,6 +103,12 @@ playtest:
 	@echo "== playtest =="
 	@GODOT=$(GODOT) $(PY) -m tools.playtest
 
+## Gera o vale com duas seeds, mede a diferença entre elas e prova que os dois são
+## jogáveis. Precisa do Godot com display.
+valley:
+	@echo "== valley =="
+	@GODOT=$(GODOT) $(PY) -m tools.valley
+
 ## Percorre a rota fixa, mede, e acrescenta uma linha a docs/bench_history.csv.
 ## Precisa do Godot com display.
 bench:
@@ -113,7 +120,7 @@ clean:
 	@echo "== clean =="
 	@rm -rf assets/generated
 	@rm -rf .godot
-	@rm -rf docs/assets docs/shots docs/anim docs/player docs/assets.html docs/bench.json
+	@rm -rf docs/assets docs/shots docs/anim docs/player docs/valley docs/assets.html docs/bench.json
 	@find tools -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 	@echo "  derivado removido (docs/bench_history.csv é versionado e fica)"
 
@@ -132,12 +139,13 @@ help:
 	@echo "  make test-assets prova determinismo e orçamento do kit"
 	@echo "  make characters humanoides rigados (precisa do Blender)"
 	@echo "  make audio    barramentos e tom de calibração"
-	@echo "  make world    cenas e manifesto do mundo"
+	@echo "  make world    cenas e manifesto do mundo (SEED=123 troca o vale)"
 	@echo "  make verify   cobra a regra inegociável"
 	@echo "  make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)"
 	@echo "  make preview  renders do kit + catálogo + capturas da cena"
 	@echo "  make anim     tiras de quadros da locomoção (precisa do Godot)"
 	@echo "  make playtest dirige o jogador e mede o controle (precisa do Godot)"
+	@echo "  make valley   compara dois vales por seed (precisa do Godot)"
 	@echo "  make bench    mede a rota fixa e acumula docs/bench_history.csv"
 	@echo "  make clean    apaga o derivado"
 	@echo "  make regen    clean + all"

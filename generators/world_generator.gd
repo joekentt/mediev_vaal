@@ -1,33 +1,114 @@
 ## Monta o mundo por código, em runtime.
 ##
-## `scenes/world/main.tscn` contém um `Node3D` e nada mais. Céu, sol, chão, colisão e
-## câmera são criados aqui, a partir de `Params`. Nenhum nó deste mundo existe porque
-## alguém arrastou algo no editor — é o que torna o mundo inteiro regenerável.
+## `scenes/world/main.tscn` contém um `Node3D` e nada mais. Céu, sol, terreno, estrada,
+## vegetação, navegação e jogador são criados aqui, a partir de `Params` e de uma seed.
+## Nenhum nó deste mundo existe porque alguém arrastou algo no editor — é o que torna o
+## mundo inteiro regenerável e o que faz `make world SEED=123` significar alguma coisa.
 ##
-## Fase 1 monta só o estágio vazio: chão cinza, céu e uma câmera fixa para conferir
-## paleta e desempenho. Terreno, cidade e vegetação entram nas fases 3 e 4, como funções
-## novas neste mesmo arquivo e nos seus vizinhos de `generators/`.
+## A ordem importa e é a única possível:
+##
+##   relevo → estrada (que corta o relevo) → malha e colisão → vegetação → navegação
+##
+## A estrada precisa do relevo para saber por onde passar e precisa alterá-lo antes de a
+## malha existir; a vegetação precisa da estrada para não nascer no meio dela; a navegação
+## precisa da malha final, porque é dela que o assador lê a geometria.
+##
+## O estágio plano da fase 1 continua aqui, em `build_flat_stage`: as provas de locomoção
+## e de controle precisam de um piso previsível, porque medir passada em terreno acidentado
+## mediria o terreno e não a passada.
 class_name WorldGenerator
 extends RefCounted
 
 const STAGE_ROOT_NAME: StringName = &"Stage"
+const TERRAIN_ROOT_NAME: StringName = &"Terrain"
+const SCATTER_ROOT_NAME: StringName = &"Scatter"
+const NAV_ROOT_NAME: StringName = &"Navigation"
+const PLAYER_NODE_NAME: StringName = &"Player"
 const GROUND_MATERIAL: StringName = &"ground"
 const GROUND_MESH_CATEGORY: StringName = &"stage_ground"
-const PLAYER_NODE_NAME: StringName = &"Player"
+const MANIFEST_PATH: String = "/world/world_manifest.json"
 
 const TONEMAP_LINEAR: String = "linear"
 const TONEMAP_REINHARDT: String = "reinhardt"
 const TONEMAP_FILMIC: String = "filmic"
 const TONEMAP_ACES: String = "aces"
+const SPLITS_ORTHOGONAL: String = "orthogonal"
+const SPLITS_TWO: String = "2_splits"
+const SPLITS_FOUR: String = "4_splits"
+
+## Folga vertical do ponto de nascimento, para o jogador não começar dentro do chão.
+const SPAWN_CLEARANCE: float = 0.4
+
+## Campo do vale gerado por último. Quem precisa da altura do relevo — o bench, para não
+## enterrar a câmera na montanha; a prova, para medir — lê daqui em vez de refazer o ruído.
+static var last_field: HeightField = null
+## Estatística da última geração. Vai para `docs/bench.json` e para o relatório da prova.
+static var last_report: Dictionary = {}
 
 
-## Constrói o estágio inteiro sob `root`, substituindo o que já estiver lá.
+## Constrói o vale inteiro sob `root`, substituindo o que já estiver lá.
 ## Devolve o nó raiz do estágio.
 ##
-## `with_player` desligado dá o estágio sem ninguém dentro — é o que as provas visuais
-## querem: `anim_preview` põe o próprio corpo e `playtest` a própria arena, e um jogador
-## extra apareceria no meio do quadro de ambos.
+## `with_player` desligado dá o vale sem ninguém dentro — é o que as provas visuais
+## querem: um jogador extra apareceria no meio do quadro.
 static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
+	var stage: Node3D = _fresh_stage(root)
+	stage.add_child(build_environment())
+	stage.add_child(build_sun())
+
+	var world_seed: int = current_seed()
+	var started: int = Time.get_ticks_msec()
+
+	var field: HeightField = TerrainGenerator.build_field(world_seed)
+	var curve: Curve3D = RoadGenerator.carve(field, world_seed)
+	last_field = field
+
+	var terrain: Node3D = Node3D.new()
+	terrain.name = TERRAIN_ROOT_NAME
+	stage.add_child(terrain)
+	var chunks: int = TerrainGenerator.build_chunks(field, terrain)
+
+	var scatter_root: Node3D = Node3D.new()
+	scatter_root.name = SCATTER_ROOT_NAME
+	stage.add_child(scatter_root)
+	var scatter: Dictionary = ScatterGenerator.scatter(field, scatter_root, world_seed)
+
+	var region: NavigationRegion3D = build_navigation()
+	stage.add_child(region)
+	region.bake_navigation_mesh(true)
+
+	last_report = {
+		"seed": world_seed,
+		"chunks": chunks,
+		"scatter_instances": int(scatter["instances"]),
+		"scatter_nodes": int(scatter["nodes"]),
+		"road_slope": RoadGenerator.measure_slope(field, curve),
+		"road_slope_limit": Params.ROAD_MAX_SLOPE,
+		"terrain_span_m": field.span(),
+		"build_ms": float(Time.get_ticks_msec() - started),
+	}
+
+	if with_player:
+		var player: Node3D = build_player(field)
+		if player != null:
+			stage.add_child(player)
+	return stage
+
+
+## Estágio plano: céu, sol e chão liso, sem vale.
+##
+## É o cenário das provas de movimento. `make anim` mede deslizamento de pé e `make
+## playtest` mede velocidade e salto; num vale, as duas mediriam a encosta.
+static func build_flat_stage(root: Node3D) -> Node3D:
+	var stage: Node3D = _fresh_stage(root)
+	stage.add_child(build_environment())
+	stage.add_child(build_sun())
+	stage.add_child(build_flat_ground())
+	stage.add_child(build_camera())
+	return stage
+
+
+static func _fresh_stage(root: Node3D) -> Node3D:
 	var previous: Node = root.get_node_or_null(NodePath(STAGE_ROOT_NAME))
 	if previous != null:
 		root.remove_child(previous)
@@ -36,28 +117,41 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	var stage: Node3D = Node3D.new()
 	stage.name = STAGE_ROOT_NAME
 	root.add_child(stage)
-
-	stage.add_child(build_environment())
-	stage.add_child(build_sun())
-	stage.add_child(build_ground())
-	if with_player:
-		var player: Node3D = build_player()
-		if player != null:
-			stage.add_child(player)
-			return stage
-	# Sem jogador — ou sem a cena dele gerada — vale a câmera fixa da fase 1, para o
-	# estágio não abrir preto e o motivo ficar visível no console.
-	stage.add_child(build_camera())
 	return stage
 
 
+## Seed do mundo, lida do manifesto gerado.
+##
+## É o que faz `make world SEED=123` alcançar o runtime sem recompilar nada: o Python
+## escreve a seed no manifesto, o jogo lê. Sem manifesto — árvore recém-clonada —, vale a
+## seed de fábrica de `params.py`.
+static func current_seed() -> int:
+	var file: FileAccess = FileAccess.open(
+		Params.GENERATED_DIR + MANIFEST_PATH, FileAccess.READ
+	)
+	if file == null:
+		return Params.WORLD_SEED
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary:
+		return Params.WORLD_SEED
+	return int((parsed as Dictionary).get("seed", Params.WORLD_SEED))
+
+
 ## Céu procedural e névoa, sem HDRI nem textura.
+##
+## SDFGI fica desligado de propósito, e não por esquecimento: num vale aberto ele custa
+## caro e entrega quase nada, porque a iluminação indireta que ele resolve bem é a de
+## interior — e interior é a fase 9.
 static func build_environment() -> WorldEnvironment:
 	var sky_material: ProceduralSkyMaterial = ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Params.color(&"sky_zenith")
 	sky_material.sky_horizon_color = Params.color(&"sky_horizon")
 	sky_material.sky_curve = Params.SKY_CURVE
-	sky_material.ground_bottom_color = Params.color(&"earth_dark")
+	# O hemisfério inferior do céu é névoa, não chão. Ele só aparece **abaixo** da silhueta
+	# do terreno — de um alto, olhando o vale, é a faixa entre a linha dos morros e a linha
+	# do horizonte. Pintado de terra escura, essa faixa lia como um paredão de barro atrás
+	# das montanhas; com a cor da névoa, lê como distância, que é o que ela é.
+	sky_material.ground_bottom_color = Params.color(&"fog")
 	sky_material.ground_horizon_color = Params.color(&"sky_horizon")
 	sky_material.sun_angle_max = Params.SUN_ANGLE_MAX
 	sky_material.sun_curve = Params.SUN_CURVE
@@ -77,6 +171,9 @@ static func build_environment() -> WorldEnvironment:
 	environment.fog_light_color = Params.color(&"fog")
 	environment.fog_density = Params.FOG_DENSITY
 	environment.fog_sky_affect = Params.FOG_SKY_AFFECT
+	environment.sdfgi_enabled = false
+	environment.ssao_enabled = false
+	environment.ssil_enabled = false
 
 	var node: WorldEnvironment = WorldEnvironment.new()
 	node.name = "WorldEnvironment"
@@ -106,6 +203,7 @@ static func build_sun() -> DirectionalLight3D:
 	sun.light_color = Params.color(&"sun")
 	sun.light_energy = Params.STAGE_SUN_ENERGY
 	sun.shadow_enabled = true
+	sun.directional_shadow_mode = _splits_from_name(Params.SHADOW_DIRECTIONAL_SPLITS)
 	sun.directional_shadow_max_distance = Params.SHADOW_MAX_DISTANCE
 	sun.position = Vector3(0.0, Params.STAGE_SUN_HEIGHT, 0.0)
 	sun.rotation = Vector3(
@@ -116,8 +214,71 @@ static func build_sun() -> DirectionalLight3D:
 	return sun
 
 
-## Chão do estágio: malha vertex-colored gerada célula a célula, mais colisão de mundo.
-static func build_ground() -> StaticBody3D:
+## Traduz o número de cascatas de `Params` para a constante da engine.
+##
+## Cada cascata redesenha todo caster dentro do alcance da sombra, então este é um botão de
+## draw calls disfarçado de botão de qualidade.
+static func _splits_from_name(name: String) -> DirectionalLight3D.ShadowMode:
+	if name == SPLITS_ORTHOGONAL:
+		return DirectionalLight3D.SHADOW_ORTHOGONAL
+	if name == SPLITS_FOUR:
+		return DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	if name != SPLITS_TWO:
+		push_warning("Cascatas de sombra desconhecidas: %s. Usando %s." % [name, SPLITS_TWO])
+	return DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+
+
+## Região de navegação sobre o terreno já construído.
+##
+## O assado roda numa thread: 512 m de vale em célula de 1 m é trabalho de segundos, e
+## fazê-lo no `_ready` congelaria a tela na primeira coisa que o jogador vê. A geometria
+## vem do grupo `NAV_GROUP`, em que cada pedaço de terreno se inscreve — a vegetação, que
+## não bloqueia caminho nenhum, fica de fora do assado e não o encarece.
+static func build_navigation() -> NavigationRegion3D:
+	var mesh: NavigationMesh = NavigationMesh.new()
+	mesh.cell_size = Params.NAV_CELL_SIZE
+	mesh.cell_height = Params.NAV_CELL_HEIGHT
+	mesh.agent_radius = Params.NAV_AGENT_RADIUS
+	mesh.agent_height = Params.NAV_AGENT_HEIGHT
+	mesh.agent_max_climb = Params.NAV_AGENT_MAX_CLIMB
+	mesh.agent_max_slope = Params.NAV_AGENT_MAX_SLOPE_DEG
+	mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_MESH_INSTANCES
+	mesh.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN
+	mesh.geometry_source_group_name = Params.NAV_GROUP
+
+	var region: NavigationRegion3D = NavigationRegion3D.new()
+	region.name = NAV_ROOT_NAME
+	region.navigation_mesh = mesh
+	return region
+
+
+## Instancia o jogador gerado, apoiado na planície.
+static func build_player(field: HeightField) -> Node3D:
+	if not ResourceLoader.exists(Params.PLAYER_SCENE):
+		push_warning(
+			"Cena do jogador ausente (%s). Rode `make player`." % Params.PLAYER_SCENE
+		)
+		return null
+	var packed: PackedScene = ResourceLoader.load(Params.PLAYER_SCENE) as PackedScene
+	if packed == null:
+		return null
+	var player: Node3D = packed.instantiate() as Node3D
+	player.name = PLAYER_NODE_NAME
+	player.position = spawn_point(field)
+	return player
+
+
+## Onde o jogador nasce: o centro da planície, apoiado no relevo.
+static func spawn_point(field: HeightField) -> Vector3:
+	if field == null:
+		return Vector3.ZERO
+	return field.ground_point(
+		field.plain_center.x, field.plain_center.y, SPAWN_CLEARANCE
+	)
+
+
+## Chão plano do estágio da fase 1, com colisão de plano infinito.
+static func build_flat_ground() -> StaticBody3D:
 	var body: StaticBody3D = StaticBody3D.new()
 	body.name = "Ground"
 	body.collision_layer = Params.LAYER_WORLD
@@ -136,8 +297,7 @@ static func build_ground() -> StaticBody3D:
 	return body
 
 
-## Grade plana com leve variação de tom por célula — demonstra o pipeline de vertex color
-## sem custar um material a mais.
+## Grade plana em XZ com leve variação de tom por célula.
 static func build_ground_mesh() -> ArrayMesh:
 	var builder: MeshBuilder = MeshBuilder.new()
 	var base: Color = Params.color(&"ground_default")
@@ -157,23 +317,7 @@ static func build_ground_mesh() -> ArrayMesh:
 	return builder.commit(GROUND_MESH_CATEGORY)
 
 
-## Instancia o jogador gerado. Devolve `null` quando a cena ainda não existe.
-static func build_player() -> Node3D:
-	if not ResourceLoader.exists(Params.PLAYER_SCENE):
-		push_warning(
-			"Cena do jogador ausente (%s). Rode `make player`." % Params.PLAYER_SCENE
-		)
-		return null
-	var packed: PackedScene = ResourceLoader.load(Params.PLAYER_SCENE) as PackedScene
-	if packed == null:
-		return null
-	var player: Node3D = packed.instantiate() as Node3D
-	player.name = PLAYER_NODE_NAME
-	player.position = Vector3.ZERO
-	return player
-
-
-## Câmera fixa da fase 1, usada só quando não há jogador na cena.
+## Câmera fixa do estágio plano. O vale não a usa: lá quem enquadra é o jogador.
 static func build_camera() -> Camera3D:
 	var camera: Camera3D = Camera3D.new()
 	camera.name = "Camera3D"

@@ -27,14 +27,18 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `assets/generated/audio/*` | `tools/gen_audio.py` | `tools/params.py` |
 | `resources/gaits/*.tres` | `tools/gen_gaits.py` | `tools/params.py` |
 | `scenes/player/player.tscn` | `tools/gen_player.py` | `tools/params.py` |
-| `scenes/world/main.tscn` | `tools/gen_world.py` | `tools/params.py` |
+| `scenes/world/main.tscn` + manifesto do mundo | `tools/gen_world.py` | `tools/params.py` |
 | Céu, sol, chão, colisão, câmera | `generators/world_generator.gd` | `Params` |
+| Relevo do vale, colisão e cor | `generators/terrain_gen.gd` | `Params` + seed |
+| Estrada e terraplenagem | `generators/road_gen.gd` | `Params` + seed |
+| Vegetação e rochas em `MultiMesh` | `generators/scatter_gen.gd` | `Params` + seed |
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
 | `docs/assets.html` + renders | `tools/preview_assets.py` + `tools/contact_sheet.py` | manifesto do kit |
 | `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
 | `docs/bench.json` + histórico | `tools/bench.gd` | `Params.BENCH_ROUTE` |
 | `docs/anim/*.png` | `tools/anim_preview.gd` | `Params.GAIT_PROFILES` |
 | `docs/player/controle.png` + medidas | `tools/playtest.gd` | `Params.PLAYER_*` |
+| `docs/valley/seeds.png` + medidas | `tools/valley.gd` | `Params.VALLEY_SEEDS` |
 
 Consequências práticas:
 
@@ -70,12 +74,13 @@ make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
 make test-assets prova determinismo, paleta, orçamento e rig (precisa do Blender)
 make characters 7 humanoides rigados em .glb + manifesto    (precisa do Blender)
 make audio    barramentos + tom de calibração
-make world    cenas e manifesto do mundo
+make world    cenas e manifesto do mundo; `make world SEED=123` troca o vale
 make verify   cobra a regra inegociável
 make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)
 make preview  renders do kit + docs/assets.html + capturas da cena
 make anim     tiras de quadros da locomoção em docs/anim/  (precisa do Godot)
 make playtest dirige o jogador e mede o controle          (precisa do Godot)
+make valley   gera duas seeds e prova que diferem e são jogáveis (precisa do Godot)
 make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
@@ -94,7 +99,11 @@ make assets PARTS="wall barrel"       # só as peças citadas, para iterar rápi
 make characters WHO="guarda anciao"   # idem, para os corpos
 ```
 
-`make preview`, `make anim` e `make bench` acham o Godot pelo `PATH` ou pela variável
+A seed do vale **não mora em `params.py`**: mora no manifesto do mundo, escrita por
+`make world SEED=123` e lida por `WorldGenerator.current_seed()`. Trocar de vale é uma
+linha de comando, não uma edição de fonte seguida de `make params`.
+
+`make preview`, `make anim`, `make valley` e `make bench` acham o Godot pelo `PATH` ou pela variável
 `GODOT`:
 
 ```
@@ -127,7 +136,7 @@ Sem GPU (llvmpipe) a medição fica ordens de grandeza mais lenta. Use `GODOT_TI
 | Modelagem | Blender headless, via script — nunca pela interface |
 | Renderer | Forward+ |
 | Anti-aliasing | MSAA 3D 2x, debanding ligado |
-| Sombras | filtro *soft medium* (3), atlas direcional 4096, posicional 2048 |
+| Sombras | filtro *soft medium* (3), atlas direcional 4096, posicional 2048, **2 cascatas** |
 | Alvo | 60 FPS a 1080p em GPU integrada moderna |
 | Addons de terceiros | **nenhum** |
 
@@ -198,6 +207,44 @@ vértice se deforma de forma quebrada". `prova_baixo` e `prova_alto` existem só
 critério de silhueta: diferem apenas em altura e ombros, e a fábrica mede se a diferença
 chegou à malha.
 
+### O vale
+
+Um vale de 512 m nasce inteiro de um número. A ordem das camadas é o projeto:
+
+1. **Ruído** — fractal base para as montanhas, detalhe por cima, e a altura normalizada
+   elevada a `TERRAIN_VALLEY_POWER`. A potência é o que separa um vale de um mar de
+   colinas: ela afunda os fundos e rarefaz os picos.
+2. **Borda** — subida nos últimos `1 - TERRAIN_RIM_START` do lado, para o vale fechar em
+   montanha em vez de terminar no vazio depois do último polígono.
+3. **Planície** — o disco onde a fase 8 vai construir, puxado para a própria altura média.
+   Ele **desliza com a seed** (`TERRAIN_PLAIN_WANDER`): parado no centro, entregaria o
+   mundo como procedural na primeira vista aérea.
+4. **Erosão térmica** — o que passa do ângulo de talude escorrega para o vizinho mais
+   baixo. Não é hidráulica e não cava rios; corta as encostas que o ruído cru produz e que
+   nenhum personagem sobe.
+5. **Estrada** — e aqui **o terreno se ajusta à curva, não o contrário**. A curva amostra
+   o relevo, o perfil é suavizado e limitado, e só então o terreno é cortado para encontrar
+   a estrada. Traçar por cima do relevo pronto herdaria cada lombada do ruído.
+6. **Espalhamento**, **navegação** e **ambiente**, que só leem o que já está pronto.
+
+Tudo isso vive num `HeightField` só, e não é recalculado por consumidor. A árvore fica *em
+cima* do chão porque lê a mesma altura que a malha usou.
+
+Duas coisas aprendidas medindo, e que o código explica no lugar:
+
+- **A estrada é projetada abaixo do limite que tem de cumprir.** O nivelamento trabalha no
+  perfil, amostrado a cada 1,2 m; quem respeita `ROAD_MAX_SLOPE` é o terreno, que é uma
+  grade de 4 m. `ROAD_GRADE_MARGIN` é a folga entre projeto e aceite. Sem ela a estrada
+  cumpria o limite no papel e o estourava no relevo — medido em 0,125 contra 0,11.
+- **O leito é cravado por projeção no eixo**, não copiando a altura da amostra mais
+  próxima. Copiar de uma amostra discreta faz vértices vizinhos do mesmo leito herdarem
+  pontos diferentes da curva, e o leito sai serrilhado.
+
+`make valley` prova a fase em número: gera cada seed num processo do Godot só, mede a
+diferença de relevo entre elas **para dentro da borda** (a borda é idêntica em qualquer
+seed, e no denominador ela só dilui), confere que a mesma seed duas vezes dá diferença
+zero, e cobra estrada, navegação e ponto de nascimento em cada vale.
+
 ---
 
 ## Estrutura
@@ -222,10 +269,16 @@ chegou à malha.
   godot_shot.gd     capturas da cena de pontos nomeados (Godot)
   bench.gd          percorre a rota fixa e mede (Godot)
   preview.py        orquestra os renders, o catálogo e as capturas
+  valley.gd         gera cada seed num processo só e mede o vale (Godot)
+  valley.py         roda valley.gd e cobra os critérios de aceite do vale
   bench.py          roda bench.gd e traduz falha de ambiente
 /generators         geração em GDScript (runtime)
   mesh_builder.gd   ArrayMesh flat + vertex color; valida orçamento de tris
   material_library.gd  materiais compartilhados, um por nome
+  height_field.gd   o vale como dado: alturas e distância até a estrada
+  terrain_gen.gd    ruído em camadas, borda, planície, erosão e malha colorida
+  road_gen.gd       traçado por spline, nivelamento e terraplenagem do leito
+  scatter_gen.gd    vegetação e rochas em MultiMesh, com máscara e 3 LODs
   world_generator.gd   monta o mundo sob a raiz da cena
 /scenes             cenas — quase vazias por construção
 /scripts
@@ -248,6 +301,7 @@ chegou à malha.
   assets.html       catálogo visual do kit (derivado)
   anim/             tiras de quadros da locomoção (derivado)
   player/           tira do controle do jogador (derivado)
+  valley/           vista aérea de cada seed, uma sobre a outra (derivado)
   bench_history.csv VERSIONADO: uma linha por execução de `make bench`
 ```
 
@@ -363,7 +417,13 @@ Como o orçamento é mantido:
 - `MultiMeshInstance3D` para tudo que se repete: vegetação, cercas, telhados, pedras.
 - Malhas da cidade agrupadas por quadra, não um nó por tijolo.
 - Occlusion culling ligado; prédios grandes são occluders.
-- LOD e `visibility_range` em qualquer coisa que apareça mais de 20 vezes.
+- LOD e `visibility_range` em qualquer coisa que apareça mais de 20 vezes. A partir da
+  segunda faixa, **todos os tipos dividem um `MultiMesh` só**: o proxy é um prisma unitário
+  esticado e tingido por instância, então uma faixa custa um draw call por bloco em vez de
+  um por tipo por bloco.
+- **Cascata de sombra é draw call.** Cada uma redesenha todo caster dentro de
+  `SHADOW_MAX_DISTANCE`. Foi o que estourou o orçamento do vale — 141 draw calls com as 4
+  cascatas padrão, 90 com 2 — e não a geometria, que era onde eu estava procurando.
 - NPCs além do teto de ativos são simulados de forma abstrata (posição e agenda em
   dados, sem nó na árvore).
 - Nada de busca ou pathfinding por frame. Rotina de NPC reage a `EventBus.hour_changed`;
@@ -415,14 +475,19 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    `kit_nature`, geradas em Blender headless, exportadas em `.glb` com manifesto, dentro
    dos tetos de `KIT_TRI_BUDGET` e com determinismo provado byte a byte.
 
-3. **Olhos: catálogo e medição** ✅ *(esta etapa)*
+3. **Olhos: catálogo e medição** ✅
    `make preview` renderiza o kit em `docs/assets.html` e captura a cena; `make bench`
    percorre uma rota fixa e acumula `docs/bench_history.csv`. Nenhuma fase fecha sem os
    dois.
 
-4. **Terreno e mundo**
-   Altura procedural com seed, chunks de 32 m, streaming por distância, biomas por
-   paleta, água. Vegetação em `MultiMesh`.
+4. **Terreno e mundo** ✅ *(esta etapa)*
+   O vale de 512 m inteiro por seed: ruído em camadas com borda, planície e erosão
+   térmica em `terrain_gen.gd`; estrada por spline que nivela o terreno sob si em
+   `road_gen.gd`; vegetação e rochas em `MultiMesh` com máscara de estrada e três LODs
+   com fade em `scatter_gen.gd`; céu procedural, névoa e tonemap Filmic; navegação
+   assada ao fim da geração. `make world SEED=123` troca o vale e `make valley` prova
+   que duas seeds dão vales diferentes e jogáveis. *Água ficou de fora — não há bioma
+   que a peça ainda, e ela entra com os biomas.*
 
 5. **Ciclo dia/noite**
    `TimeSystem` passa a mover o sol, a cor do céu e a névoa. Iluminação por período,
@@ -472,7 +537,8 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 ## Ao terminar qualquer fase
 
 **Nenhuma fase está concluída sem `make preview` e `make bench` rodados, com os números
-colados no commit.** Não é cerimônia. Um gerador não tem como saber se o que ele produziu
+colados no commit** — mais o alvo de medição que a fase tenha criado (`make anim`,
+`make playtest`, `make valley`). Não é cerimônia. Um gerador não tem como saber se o que ele produziu
 parece certo, e uma contagem de triângulos dentro do orçamento não impede uma árvore de
 sair torta ou um chão de sumir por winding invertido — as duas coisas já aconteceram
 neste projeto e foram encontradas *olhando*, não lendo log.
@@ -496,6 +562,14 @@ neste projeto e foram encontradas *olhando*, não lendo log.
 - altura do salto, e se o coyote time aceita um pulo *depois* da beirada;
 - a menor folga da lente numa órbita completa encostado num muro. Negativa é a câmera
   dentro da parede, que é o critério de aceite em número.
+
+`make valley` responde "a seed manda?":
+
+- a diferença média de relevo entre duas seeds, medida para dentro da borda e como fração
+  da amplitude que elas cobrem — e a mesma seed duas vezes, que tem de dar zero;
+- a maior inclinação da estrada **no terreno construído**, contra `ROAD_MAX_SLOPE`;
+- a fração do vale que a malha de navegação cobre, e a folga do ponto de nascimento;
+- `docs/valley/seeds.png`, com os dois vales do mesmo ponto de câmera.
 
 `make bench` responde "cabe?":
 
