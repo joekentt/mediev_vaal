@@ -72,3 +72,6 @@ fixed_size = true
 pixel_size = 0.0035
 outline_size = 10
 visible = false
+visibility_range_end = 26
+visibility_range_end_margin = 3.9
+visibility_range_fade_mode = 1

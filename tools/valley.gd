@@ -120,6 +120,9 @@ func _grow(world_seed: int) -> Dictionary:
 	_stage = Node3D.new()
 	root.add_child(_stage)
 	WorldGenerator.build_stage(_stage, false)
+	# As duas seeds são fotografadas do mesmo ponto para se comparar o relevo. Sob céus
+	# diferentes, a diferença que salta aos olhos seria a luz, e não o vale.
+	WorldGenerator.pin_sky(_stage, Params.SHOT_HOUR)
 
 	var field: HeightField = WorldGenerator.last_field
 	var report: Dictionary = WorldGenerator.last_report.duplicate()

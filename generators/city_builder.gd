@@ -52,18 +52,81 @@ static func build(
 
 	var wall_boxes: Array[Dictionary] = _build_wall(layout, field, pool, root)
 	var building_boxes: Array[Dictionary] = _build_buildings(layout, field, pool, cards, root, rng)
-	_build_props(layout, field, pool, rng)
+	var lanterns: Array[Vector3] = _build_props(layout, field, pool, rng)
 	_build_markers(layout, root)
 
 	var instances: int = _flush(pool, root)
 	_build_cards(cards, root)
 	_build_occluders(wall_boxes + building_boxes, root)
+	var night: Dictionary = _build_night_lights(lanterns, layout, root)
 
 	return {
 		"instances": instances,
 		"draw_nodes": _pool_size(pool),
 		"occluders": wall_boxes.size() + building_boxes.size(),
+		"lanterns": lanterns.size(),
+		"lantern_lights": night["lights"],
+		"lantern_glow": night["glow"],
 	}
+
+
+# --- A noite ------------------------------------------------------------------
+
+
+## O que a cidade acende quando escurece: o vidro dos lampiões e algumas luzes de verdade.
+##
+## A divisão entre os dois é orçamento, e é a mesma que todo jogo faz sem dizer. Cada
+## lampião ganha um quadrado emissivo — todos num `MeshInstance3D` só, um draw call para a
+## cidade inteira, e o material já é o das janelas. Só os `DAY_CYCLE_LANTERN_LIGHTS` mais
+## próximos da praça ganham `OmniLight3D`, porque luz pontual custa por objeto iluminado e
+## a praça é o único lugar em que alguém para para olhar.
+##
+## Nenhuma delas projeta sombra. Sombra pontual é atlas, e o orçamento tem quatro — todas
+## reservadas para os interiores da fase 9.
+static func _build_night_lights(
+	spots: Array[Vector3], layout: CityLayout, root: Node3D
+) -> Dictionary:
+	var lights: Array[OmniLight3D] = []
+	var glow: MeshInstance3D = null
+	if spots.is_empty():
+		return {"lights": lights, "glow": glow}
+
+	var builder: MeshBuilder = MeshBuilder.new()
+	var head: Vector3 = Vector3.UP * Params.DAY_CYCLE_LANTERN_HEIGHT
+	var size: Vector3 = Vector3.ONE * Params.DAY_CYCLE_GLOW_SIZE
+	for spot: Vector3 in spots:
+		builder.add_box(spot + head, size, Params.color(&"window_light"))
+
+	var mesh: ArrayMesh = builder.commit(CARD_MESH_CATEGORY)
+	if mesh != null:
+		glow = MeshInstance3D.new()
+		glow.name = "LanternGlow"
+		glow.mesh = mesh
+		glow.material_override = MaterialLibrary.get_material(Params.GLOW_MATERIAL)
+		glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		glow.visible = false
+		root.add_child(glow)
+
+	var ordered: Array[Vector3] = spots.duplicate()
+	var plaza: Vector2 = layout.plaza
+	ordered.sort_custom(
+		func(a: Vector3, b: Vector3) -> bool:
+			return Vector2(a.x, a.z).distance_squared_to(plaza) \
+				< Vector2(b.x, b.z).distance_squared_to(plaza)
+	)
+	var wanted: int = mini(Params.DAY_CYCLE_LANTERN_LIGHTS, ordered.size())
+	for index: int in wanted:
+		var lamp: OmniLight3D = OmniLight3D.new()
+		lamp.name = "Lantern%02d" % index
+		lamp.position = ordered[index] + head
+		lamp.light_color = Params.color(&"window_light")
+		lamp.light_energy = 0.0
+		lamp.omni_range = Params.DAY_CYCLE_LANTERN_RANGE
+		lamp.shadow_enabled = false
+		lamp.visible = false
+		root.add_child(lamp)
+		lights.append(lamp)
+	return {"lights": lights, "glow": glow}
 
 
 # --- Peças do kit -------------------------------------------------------------
@@ -464,7 +527,11 @@ static func _build_cards(cards: MeshBuilder, root: Node3D) -> void:
 	var node: MeshInstance3D = MeshInstance3D.new()
 	node.name = "InteriorCards"
 	node.mesh = mesh
-	node.material_override = MaterialLibrary.get_material(&"wood")
+	# Material emissivo, e é ele que faz a noite. De dia a emissão é zero e a carta é o
+	# mesmo escuro de sempre atrás da janela; à noite `DayNightCycle` sobe a emissão **do
+	# material** e cada janela da cidade acende junto, numa única atribuição. A alternativa
+	# — uma luz por janela — seria centenas de luzes para um orçamento de quatro.
+	node.material_override = MaterialLibrary.get_material(Params.GLOW_MATERIAL)
 	root.add_child(node)
 
 
@@ -473,12 +540,13 @@ static func _build_cards(cards: MeshBuilder, root: Node3D) -> void:
 
 static func _build_props(
 	layout: CityLayout, field: HeightField, pool: Dictionary, rng: RandomNumberGenerator
-) -> void:
+) -> Array[Vector3]:
 	_plaza_props(layout, field, pool, rng)
-	_street_lanterns(layout, field, pool)
+	var lanterns: Array[Vector3] = _street_lanterns(layout, field, pool)
 	_loose_props(layout, field, pool, rng)
 	_yards(layout, field, pool, rng)
 	_clotheslines(layout, field, pool, rng)
+	return lanterns
 
 
 ## Praça: poço no meio, bancas em anel, bancos entre elas.
@@ -501,9 +569,13 @@ static func _plaza_props(
 
 
 ## Lanternas ao longo das ruas, do lado de fora da faixa de rolamento.
+##
+## Devolve onde cada uma ficou: é dessa lista que sai a iluminação da noite, e recalculá-la
+## depois obrigaria a repetir a mesma varredura de ruas com as mesmas regras de descarte.
 static func _street_lanterns(
 	layout: CityLayout, field: HeightField, pool: Dictionary
-) -> void:
+) -> Array[Vector3]:
+	var spots: Array[Vector3] = []
 	for street: Dictionary in layout.streets:
 		if int(street["rank"]) > CityLayout.RANK_STREET:
 			continue
@@ -520,7 +592,10 @@ static func _street_lanterns(
 			var spot: Vector2 = a + direction * travel + side
 			if not CityLayout.inside(layout.buildable, spot):
 				continue
-			place(pool, &"lantern_post", _ground(field, spot), 0.0)
+			var base: Vector3 = _ground(field, spot)
+			place(pool, &"lantern_post", base, 0.0)
+			spots.append(base)
+	return spots
 
 
 ## Barris, caixotes, carroças e sacos encostados nas ruas.

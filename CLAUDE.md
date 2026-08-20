@@ -24,7 +24,9 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `assets/generated/materials/*.tres` | `tools/gen_materials.py` | `tools/params.py` |
 | `assets/generated/kit/*.glb` + manifesto | `tools/gen_assets.py` (Blender) | `tools/params.py` |
 | `assets/generated/characters/*.glb` + manifesto | `tools/gen_characters.py` (Blender) | `tools/params.py` |
-| `assets/generated/audio/*` | `tools/gen_audio.py` | `tools/params.py` |
+| `assets/generated/audio/*` | `tools/gen_audio.py` (NumPy) | `tools/params.py` |
+| `resources/daycycle/ciclo.tres` e `resources/weather/*.tres` | `tools/gen_daycycle.py` | `tools/params.py` |
+| Temas de música, por regra e modo | `tools/music.py` | `tools/params.py` |
 | `resources/gaits/*.tres` | `tools/gen_gaits.py` | `tools/params.py` |
 | `scenes/player/player.tscn` | `tools/gen_player.py` | `tools/params.py` |
 | `scenes/world/main.tscn` + manifesto do mundo | `tools/gen_world.py` | `tools/params.py` |
@@ -39,6 +41,9 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `scenes/npc/npc.tscn` | `tools/gen_npc.py` | `tools/params.py` |
 | População: corpo, rotina e posto | `generators/population_gen.gd` | `CityLayout` + seed |
 | Fumaça, pássaros, folhas, cachorro, martelo | `generators/ambient_gen.gd` | `Params` + seed |
+| Sol, céu, névoa e a noite acesa | `scripts/gameplay/day_night_cycle.gd` | `DayCycleProfile` |
+| Chuva, nuvem e o abafamento do som | `scripts/gameplay/weather_system.gd` | `WeatherProfile` |
+| Zona sonora e tema em cartaz | `scripts/gameplay/soundscape.gd` | `CityLayout` + relógio |
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
 | `docs/assets.html` + renders | `tools/preview_assets.py` + `tools/contact_sheet.py` | manifesto do kit |
 | `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
@@ -49,6 +54,8 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `docs/shots/city/*.png` + medidas | `tools/city.gd` | `Params.CITY_SEEDS` |
 | Medidas de 3 min de praça | `tools/population.gd` | `Params.POPULATION_*` |
 | Medidas da conversa e da rotina | `tools/dialogue.gd` | `Params.DIALOGUE_*` |
+| `docs/daynight/dia.png` + medidas do ciclo | `tools/daynight.gd` | `Params.DAYNIGHT_*` |
+| Medidas do crossfade de zona | `tools/soundscape.gd` | `Params.SOUNDSCAPE_*` |
 
 Consequências práticas:
 
@@ -81,12 +88,13 @@ make materials  biblioteca de materiais do Godot
 make gaits    perfis de marcha em resources/gaits/
 make schedules agendas diárias em resources/schedules/
 make dialogues árvores de conversa em resources/dialogues/
+make daycycle ciclo do dia em resources/daycycle/ e climas em resources/weather/
 make npc      cena do habitante em scenes/npc/
 make player   cena do jogador em scenes/player/
 make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
 make test-assets prova determinismo, paleta, orçamento e rig (precisa do Blender)
 make characters 7 humanoides rigados em .glb + manifesto    (precisa do Blender)
-make audio    barramentos + tom de calibração
+make audio    banco sonoro inteiro em assets/generated/audio/  (precisa do NumPy)
 make world    cenas e manifesto do mundo; `make world SEED=123` troca o vale
 make verify   cobra a regra inegociável
 make warnings prova que o Godot não acusa nenhum aviso (precisa do Godot)
@@ -97,6 +105,8 @@ make valley   gera duas seeds e prova que diferem e são jogáveis (precisa do G
 make city     gera 3 cidades, valida e captura 6 pontos; `make city SEED=123` (precisa do Godot)
 make population roda 3 min de praça e prova que a cidade tem vida (precisa do Godot)
 make dialogue prova que conversar não quebra a rotina do habitante (precisa do Godot)
+make daynight acelera o dia e prova que a cor não salta      (precisa do Godot)
+make soundscape prova que entrar na cidade não corta o som   (precisa do Godot)
 make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
@@ -148,13 +158,21 @@ Sem GPU (llvmpipe) a medição fica ordens de grandeza mais lenta. Use `GODOT_TI
 | --- | --- |
 | Engine | Godot 4.x |
 | Linguagem do jogo | GDScript, sempre tipado |
-| Linguagem do pipeline | Python 3 (stdlib apenas) |
+| Linguagem do pipeline | Python 3 (stdlib, mais NumPy só na síntese de áudio) |
 | Modelagem | Blender headless, via script — nunca pela interface |
 | Renderer | Forward+ |
 | Anti-aliasing | MSAA 3D 2x, debanding ligado |
 | Sombras | filtro *soft medium* (3), atlas direcional 4096, posicional 2048, **2 cascatas** |
 | Alvo | 60 FPS a 1080p em GPU integrada moderna |
 | Addons de terceiros | **nenhum** |
+
+**A dependência de NumPy é nova e vale explicar.** Até a fase 11 o pipeline inteiro era
+stdlib. Síntese de som é a primeira coisa do projeto que trabalha em vetores de milhões de
+amostras: um leito de ambiência de 22 s são 970 mil amostras, e um filtro por FFT sobre
+elas é uma linha em NumPy e um laço de horas em Python puro. O banco inteiro — 49 arquivos,
+256 segundos de som — leva **7 segundos** para nascer. É a mesma troca que o Blender já é
+para a malha: uma ferramenta especializada rodando por script, nunca pela interface.
+`make audio` é o único alvo que a pede; todo o resto continua stdlib.
 
 ### Estética
 
@@ -422,6 +440,120 @@ em que uma partida a percorreria: uma escolha trancada por flag abre depois que 
 conversa acende a flag, e uma trancada por reputação abre depois que a escolha do ferreiro
 paga os pontos.
 
+### O dia
+
+Um dia dura 24 minutos reais e cabe inteiro numa tabela de onze chaves. A decisão de
+projeto está no formato: **as chaves são pontos de gradiente, não estados**. O que o
+jogador vê às 6h32 não está escrito em lugar nenhum — é a interpolação entre a chave das
+5h30 e a das 7h. Não existe transição para escrever, e transição escrita à mão é
+exatamente onde nasce o salto de cor.
+
+`resources/daycycle/ciclo.tres` traz quatro `Gradient` de cor (zênite, horizonte, névoa,
+sol) e seis `Curve` de número (energia, densidade de névoa, ambiente, elevação, azimute e
+*luz*). `DayNightCycle` amostra os dez pela fração do dia e escreve em `DirectionalLight3D`
+e em `Environment`. Cinco períodos — madrugada, amanhecer, dia, entardecer, noite — chegam
+por `EventBus.day_period_changed`; a madrugada é um período separado da noite de propósito,
+porque o vale às 2h e o vale às 21h têm luz parecida e cidade diferente.
+
+Quatro coisas que o código explica no lugar, e que a medição encontrou:
+
+- **O sol nunca se apaga: à noite ele é a lua.** O orçamento tem uma luz direcional. Apagar
+  a única deixaria a cidade sem sombra nenhuma, e sem sombra a noite lê como cinza chapado
+  em cima de tudo. A tabela nunca põe a elevação abaixo do horizonte, e o gerador reprova
+  quem tentar.
+- **Nada é aplicado por quadro.** O ciclo só reescreve luz e cor quando a fração do dia
+  andou mais que `DAY_CYCLE_MIN_STEP` — medido, uma vez a cada 30 quadros na velocidade
+  normal. Entre elas o nó custa uma subtração. O degrau que essa economia introduz é o
+  **único** degrau possível no ciclo, e é o que `make daynight` mede.
+- **A noite acende um material, não mil janelas.** Toda carta de interior falso da cidade
+  divide um `StandardMaterial3D` emissivo; subir a emissão dele acende a cidade inteira
+  numa atribuição. O mesmo material serve o vidro dos lampiões, e só os seis mais próximos
+  da praça ganham `OmniLight3D` — sem sombra, que é atlas e o orçamento tem quatro.
+- **O clima multiplica, nunca substitui.** `WeatherProfile` só tem fatores: nublado ao
+  meio-dia continua sendo meio-dia com um terço menos de sol. Um clima que escrevesse "o
+  céu é cinza" apagaria o ciclo, e o dia pararia de andar até parar de chover.
+
+A chuva acompanha a câmera numa caixa de 26 m com novecentas gotas — chover no vale
+inteiro simularia milhões de gotas para que 99,99% delas caíssem onde ninguém está —, deixa
+a névoa três vezes mais densa e fecha um passa-baixa em 1,4 kHz nos barramentos de mundo.
+
+E uma coisa que só a medida encontrou: **a virada do tempo tem teto de avanço por quadro**.
+Um quadro longo — um carregamento, o assado da navegação terminando — chega com um `delta`
+de vários segundos, e sem teto ele completava os doze segundos da transição de uma vez. O
+céu saltava de ensolarado para chuva num quadro só, e `make daynight` entregou o defeito
+como 0,78 de energia de sol e 0,18 de cor num quadro.
+
+`make daynight` prova a fase em número, e a tira `docs/daynight/dia.png` mostra o dia
+inteiro em cores lado a lado — sem renderizador, desenhada com os mesmos valores medidos.
+
+### O som
+
+Todo som do jogo nasce em `tools/gen_audio.py`, em NumPy, e sai em `.wav`. Nada é baixado,
+gravado ou comprado: é a regra inegociável aplicada ao que se ouve. São 49 arquivos —
+passos por superfície, vento em camadas, chilro por FM, martelo, porta, água do poço,
+murmúrio, o banco de sílabas de cada raça, três leitos de ambiência, chuva e três temas.
+
+O que separa cada som do vizinho é físico, não é volume:
+
+- **Passo**: terra é grave e morre em 55 ms, pedra é aguda e seca, madeira tem uma
+  ressonância no meio que continua soando depois do golpe. Três variantes de cada — o mesmo
+  passo repetido lê como metrônomo.
+- **Vento**: três camadas com rajadas de frequências primas entre si. Uma camada só, por
+  mais filtrada que seja, tem período audível.
+- **Porta**: um trem de pulsos que desacelera passando por uma ressonância **parada**, que
+  é literalmente o que uma dobradiça faz. Filtro que varia no tempo não é preciso; quem
+  varia é a fonte. É a mesma razão pela qual todo filtro do módulo é por FFT e não por
+  recursão: multiplicar um espectro é vetorizado, um biquad é um laço de 44 100 iterações
+  por segundo de som.
+- **Voz**: fonte e filtro, como a voz humana. Um trem de pulsos faz a glote e dois
+  formantes dizem que vogal é — e é mover F1 e F2 que muda **quem** está falando sem mexer
+  na altura da voz. Por isso a tabela de raças é uma tabela de formantes.
+- **Música**: um modo, uma tabela de transição entre graus e três regras de melodia (grau
+  de acorde no tempo forte, passo antes de salto, salto resolve por passo contrário). Não
+  há partitura em lugar nenhum. Cada tema fecha o laço somando a cauda de volta no começo,
+  que é a única das três formas de fechar um laço que não se ouve.
+
+E a música se prova sozinha: `make audio` mede os oito picos mais fortes do espectro de
+cada tema e reprova a geração se algum cair fora do modo declarado ou desafinado acima de
+`MUSIC_TUNING_CENTS`. É a diferença entre "gerou som" e "gerou música", e é a única forma
+de pegar um erro de oitava ou uma razão de harmônico trocada sem ouvir — nada disso muda o
+número de notas nem a duração, muda só onde as notas caem. Medido: 1,5 a 1,9 centésimos nos
+três temas, tudo dentro da escala.
+
+Três coisas que a medição do som ensinou, e que agora `make soundscape` vigia:
+
+- **O padrão de import de .wav é com perda.** Godot 4.3+ recomprime todo .wav em QOA. Num
+  projeto que sintetiza cada byte e recusa textura de imagem, deixar isso passar seria a
+  transformação escondida que a regra inegociável existe para barrar — e tem consequência
+  prática: a voz costura uma fala concatenando bytes de sílabas, e bytes de QOA não se
+  concatenam. A voz saía muda, e foi assim que o defeito apareceu. O preset vive em
+  `[importer_defaults]` no `project.godot` gerado, uma linha para o banco inteiro.
+- **Leito e trilha precisam ser marcados para repetir.** Um leito de 22 s que toca uma vez
+  deixa a floresta em silêncio no vigésimo terceiro segundo — o defeito mais fácil de não
+  notar num teste curto e o mais óbvio de notar jogando. A marca é posta no carregamento e
+  não no import, porque o mesmo importador serve as sílabas e os passos, e um passo em
+  laço é um pé arrastando para sempre.
+- **O `AudioManager` é dono dos leitos, não inquilino.** Com dois players de ambiência, o
+  leito que sai de cena a cada troca perde a última referência e é descarregado — e o
+  próximo `load` traz uma cópia nova do disco, sem a marca de laço. Andar para dentro e
+  para fora da cidade três vezes deixava um dos três leitos sem repetir. Agora eles ficam
+  num cache que nunca solta, o que de quebra tira a leitura de disco do meio da travessia:
+  entrar na cidade não é o momento de descomprimir vinte segundos de áudio.
+
+**As zonas são a peça nova do `AudioManager`.** Floresta, cidade e interior têm cada uma o
+seu leito, e trocar de zona é um crossfade de dois segundos entre dois players. O crossfade
+é de **potência constante**, e essa é a decisão de peso: escrever as duas rampas em reta é
+o que sai naturalmente, e afunda o volume percebido para 71% no meio da troca — o "corte"
+que o critério da fase proíbe. Com seno e cosseno a soma dos quadrados é 1 do começo ao
+fim. `make soundscape` mede exatamente isso, e o teto de 0,72 está entre as duas
+implementações de propósito: reprova a ingênua e aprova a certa.
+
+`Soundscape` decide a zona a 4 Hz, com histerese de 6 m na muralha — sem ela, parar em cima
+da linha alterna o leito quatro vezes por segundo e o crossfade de dois segundos nunca
+chega ao fim. O interior é medido contra a caixa dos prédios que **têm** interior de
+verdade: os outros são fachada com carta escura atrás da janela, e abafar o som ao encostar
+neles seria abafar por causa de um cômodo que não existe.
+
 ---
 
 ## Estrutura
@@ -453,6 +585,14 @@ paga os pontos.
   population.gd     roda 3 min de praça e mede vida, entalo e parede (Godot)
   population.py     roda population.gd e cobra os critérios de aceite da vida
   gen_dialogues.py  árvores de conversa em resources/dialogues/, com auditoria do grafo
+  gen_daycycle.py   o dia em gradientes e curvas, e os três climas, em .tres
+  dsp.py            síntese em NumPy: osciladores, envelopes, filtros por FFT, mistura
+  music.py          modo, progressão por regras e três timbres — a trilha nasce aqui
+  imagelib.py       escrita de PNG em stdlib, para a tira do dia
+  daynight.gd       acelera o dia, mede o salto de cor e desenha a tira (Godot)
+  daynight.py       roda daynight.gd e cobra os critérios de aceite do ciclo
+  soundscape.gd     atravessa a fronteira da cidade e mede o crossfade (Godot)
+  soundscape.py     roda soundscape.gd e cobra os critérios de aceite do som
   dialogue.gd       conversa com um habitante em rotina e mede a retomada (Godot)
   dialogue.py       roda dialogue.gd e cobra os critérios de aceite da conversa
   bench.py          roda bench.gd e traduz falha de ambiente
@@ -487,7 +627,12 @@ paga os pontos.
     interaction_sensor.gd     escolhe o alvo por centralidade na tela
     dialogue_tree.gd          Resource de conversa: nós, condições e escolhas
     dialogue_runner.gd        costura árvore, NPC, câmera, voz e GameState
-    procedural_voice.gd       sílabas sintetizadas, pitch estável derivado do id
+    procedural_voice.gd       costura sílabas do banco gerado; pitch estável por id
+    day_cycle_profile.gd      Resource do dia: quatro gradientes e seis curvas
+    day_night_cycle.gd        move sol, céu, névoa e a luz de dentro das casas
+    weather_profile.gd        Resource de clima: só multiplicadores, nunca valor absoluto
+    weather_system.gd         chuva na câmera, nuvem na névoa e passa-baixa no som
+    soundscape.gd             que zona sonora é esta, e que tema toca nela
   ai/               comportamento de NPC
   ui/               telas e widgets, construídos em código
     context_prompt.gd         a linha do rodapé que aparece e some
@@ -496,15 +641,19 @@ paga os pontos.
   gaits/            perfis de marcha por postura (gerado, versionado)
   schedules/        agendas diárias por arquétipo (gerado, versionado)
   dialogues/        árvores de conversa (gerado, versionado)
+  daycycle/         o dia em gradientes e curvas (gerado, versionado)
+  weather/          os três climas, em multiplicadores (gerado, versionado)
 /assets/generated   DERIVADO — no .gitignore, volta com `make all`
   kit/              as 34 peças em .glb + manifest.json
   characters/       os 7 humanoides em .glb com esqueleto + manifest.json
+  audio/            49 .wav sintetizados + manifest.json: efeitos, vozes, leitos, música
 /docs               documentação do pipeline
   assets.html       catálogo visual do kit (derivado)
   anim/             tiras de quadros da locomoção (derivado)
   player/           tira do controle do jogador (derivado)
   valley/           vista aérea de cada seed, uma sobre a outra (derivado)
   shots/city/       seis pontos da cidade (derivado)
+  daynight/dia.png  o dia inteiro em cores, faixa por faixa (derivado)
   bench_history.csv VERSIONADO: uma linha por execução de `make bench`
 ```
 
@@ -696,9 +845,16 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    que duas seeds dão vales diferentes e jogáveis. *Água ficou de fora — não há bioma
    que a peça ainda, e ela entra com os biomas.*
 
-5. **Ciclo dia/noite**
-   `TimeSystem` passa a mover o sol, a cor do céu e a névoa. Iluminação por período,
-   sem custo por frame além da interpolação.
+5. **Ciclo dia/noite** ✅
+   Um dia de 24 minutos reais, exportável, com cinco períodos anunciados por sinal.
+   `DayCycleProfile` em `resources/daycycle/`: quatro gradientes de cor e seis curvas de
+   número, amostrados pela fração do dia — não há estado por período, só interpolação.
+   `DayNightCycle` move sol, céu, névoa e ambiente, e reaplica uma vez a cada 30 quadros
+   na velocidade normal. À noite as janelas acendem por emissão de material e seis
+   lampiões da praça ganham luz pontual; a praça esvazia porque a agenda da fase 10 manda
+   todo mundo para casa. Mais três climas em `resources/weather/`, que **multiplicam** o
+   que o ciclo decidiu: chuva de partículas acompanhando a câmera, névoa mais densa e
+   passa-baixa nos barramentos de mundo. `make daynight` mede.
 
 6. **Jogador e câmera** ✅
    `scenes/player/player.tscn` gerada por `tools/gen_player.py`: `CharacterBody3D`,
@@ -744,9 +900,15 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
     não um `Resource` de povo: a facção existe como reputação que o diálogo lê e escreve,
     e nada fora do diálogo depende dela ainda.*
 
-12. **Áudio procedural**
-    Síntese de música e efeitos em `tools/gen_audio.py` — o mesmo caminho do tom de
-    calibração da fase 1. Trilha adaptativa por período do dia, ambiência por bioma.
+12. **Áudio procedural** ✅ *(junto com a fase 5, a pedido explícito)*
+    Banco sonoro inteiro sintetizado em NumPy por `tools/gen_audio.py`: passos por
+    superfície, vento em camadas, chilro por FM, martelo, porta, água, murmúrio de
+    multidão, o banco de sílabas de cada raça com formantes distintos, três leitos de
+    ambiência, chuva e três temas de música generativa — modo, progressão por regras e
+    timbres sintetizados. `AudioManager` ganhou zonas com crossfade de potência constante
+    de 2 s, e `Soundscape` decide a zona pela posição do ouvinte e o tema pelo período.
+    `make soundscape` mede. *A ambiência é por zona, não por bioma: bioma é assunto da
+    fase que trouxer água e vegetação por região.*
 
 13. **Itens, combate e fechamento**
     Itens e equipamento gerados, combate corpo a corpo e à distância, IA hostil,
@@ -759,7 +921,8 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 
 **Nenhuma fase está concluída sem `make preview` e `make bench` rodados, com os números
 colados no commit** — mais o alvo de medição que a fase tenha criado (`make anim`,
-`make playtest`, `make valley`, `make city`, `make population`, `make dialogue`). Não é
+`make playtest`, `make valley`, `make city`, `make population`, `make dialogue`,
+`make daynight`, `make soundscape`). Não é
 cerimônia. Um gerador não tem como saber se o que ele produziu
 parece certo, e uma contagem de triângulos dentro do orçamento não impede uma árvore de
 sair torta ou um chão de sumir por winding invertido — as duas coisas já aconteceram
@@ -821,6 +984,42 @@ neste projeto e foram encontradas *olhando*, não lendo log.
 - quantas escolhas cada nó ofereceu antes e depois de a flag acender e de a reputação ser
   paga, que é a máquina de condições medida contra o estado que a partida acumulou;
 - a estabilidade do pitch por id, que é o único critério de voz que ouvido nenhum pega.
+
+`make daynight` responde "o dia anda sem saltar?":
+
+- quanto a cor andou **além** do que a interpolação pedia, com o tempo 360 vezes
+  acelerado. É a medida certa: a 360x a paleta do amanhecer **tem** de passar em fração de
+  segundo, e cobrar degrau por quadro seria cobrar que o amanhecer demore. O excesso sobre
+  o ideal é o salto que o sistema introduz, e é o único que o jogador leria como corte;
+- a velocidade máxima do gradiente, em cor por hora de jogo — o amanhecer real mede 0,47 e
+  uma descontinuidade mediria 10, então o teto de 2,0 separa os dois sem ambiguidade;
+- o degrau na virada da meia-noite, que é a única emenda do laço e a que ninguém está
+  olhando quando quebra;
+- quantas vezes o ciclo reescreveu a iluminação em 240 quadros na velocidade normal — é
+  "sem custo por quadro" medido, e não prometido;
+- a emissão das janelas e os lampiões acesos de dia e de noite, e quantos habitantes
+  restam na praça à 1h depois de 70 s de cidade respondendo à hora;
+- névoa, sol, chuva e abafamento nos três climas, que é a prova de que eles são estados
+  diferentes em número e não três nomes na mesma tabela;
+- `docs/daynight/dia.png`, o dia inteiro em cores lado a lado — um salto vira listra.
+
+`make soundscape` responde "o som entra sem corte?":
+
+- a potência somada dos dois leitos na pior amostra de cada travessia. Um crossfade linear
+  em amplitude afunda para 0,707 no meio e um de potência constante fica em 1,0: o teto de
+  0,72 está entre os dois e reprova a implementação ingênua;
+- o maior salto de volume entre duas amostras, que pega um "para um e começa o outro"
+  disfarçado de fade;
+- a duração medida do crossfade contra os 2 s pedidos, nos dois sentidos;
+- se a taverna é reconhecida como interior, com o passa-baixa que vem com isso;
+- quantos dos arquivos do manifesto de `make audio` o Godot de fato carrega. Existir em
+  disco não é o mesmo que importar.
+
+**Toda medição e toda captura travam o céu em `SHOT_HOUR`** e no tempo firme. Uma rota
+fixa existe para que duas execuções sejam comparáveis, e um sorteio de clima no meio faria
+a diferença de draw calls entre elas ser nuvem — sem que ninguém saiba disso lendo o CSV.
+Nove da manhã porque é a primeira hora do dia com a névoa no fator 1,0, que é a névoa sob
+a qual as fases 2 a 11 foram calibradas.
 
 `make bench` responde "cabe?":
 

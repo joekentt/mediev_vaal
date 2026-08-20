@@ -26,6 +26,9 @@ const NAV_ROOT_NAME: StringName = &"Navigation"
 const PLAYER_NODE_NAME: StringName = &"Player"
 const DIALOGUE_NODE_NAME: StringName = &"Dialogue"
 const PROMPT_NODE_NAME: StringName = &"Prompt"
+const CYCLE_NODE_NAME: StringName = &"DayNight"
+const WEATHER_NODE_NAME: StringName = &"Weather"
+const SOUNDSCAPE_NODE_NAME: StringName = &"Soundscape"
 const GROUND_MATERIAL: StringName = &"ground"
 const GROUND_MESH_CATEGORY: StringName = &"stage_ground"
 const MANIFEST_PATH: String = "/world/world_manifest.json"
@@ -57,8 +60,10 @@ static var last_report: Dictionary = {}
 ## querem: um jogador extra apareceria no meio do quadro.
 static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	var stage: Node3D = _fresh_stage(root)
-	stage.add_child(build_environment())
-	stage.add_child(build_sun())
+	var environment: WorldEnvironment = build_environment()
+	var sun: DirectionalLight3D = build_sun()
+	stage.add_child(environment)
+	stage.add_child(sun)
 
 	var world_seed: int = current_seed()
 	var started: int = Time.get_ticks_msec()
@@ -104,6 +109,10 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 		layout, stage, world_seed, null, ambient["node"]
 	)
 
+	# Céu, tempo e som depois da cidade: o ciclo precisa dos lampiões para acendê-los e a
+	# paisagem sonora precisa dos interiores para saber quando abafar.
+	var atmosphere: Dictionary = build_atmosphere(stage, sun, environment.environment, layout)
+
 	last_report = {
 		"seed": world_seed,
 		"chunks": chunks,
@@ -122,6 +131,9 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 		"ambient_smoke": int(ambient["smoke"]),
 		"ambient_birds": int(ambient["birds"]),
 		"ambient_leaves": int(ambient["leaves"]),
+		"lanterns": int(city["lanterns"]),
+		"lantern_lights": (city["lantern_lights"] as Array).size(),
+		"weather": atmosphere["weather"].current(),
 		"build_ms": float(Time.get_ticks_msec() - started),
 	}
 	last_report.merge(layout.report)
@@ -136,12 +148,45 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	prompt.name = PROMPT_NODE_NAME
 	stage.add_child(prompt)
 
+	var cycle: DayNightCycle = atmosphere["cycle"]
+	cycle.bind_lanterns(city["lantern_lights"], city["lantern_glow"])
+
 	if with_player:
 		var player: Node3D = build_player(field)
 		if player != null:
 			stage.add_child(player)
 			_bind_dialogue(player, runner, prompt)
+			# O ouvinte é o corpo do jogador, e não a câmera: a câmera fica três metros
+			# atrás, e ao entrar pela porta da taverna ela ainda está do lado de fora.
+			(atmosphere["soundscape"] as Soundscape).set_listener(player)
+			(atmosphere["weather"] as WeatherSystem).set_focus(player)
 	return stage
+
+
+## Ciclo do dia, clima e paisagem sonora, sob o estágio.
+##
+## Os três juntos porque são um trio: o clima multiplica o que o ciclo decide, e a
+## paisagem sonora lê os dois. Montá-los separados obrigaria quem chama a conhecer a ordem
+## de ligação — e a ordem importa, porque o ciclo aplica a primeira iluminação no `bind`.
+static func build_atmosphere(
+	stage: Node3D, sun: DirectionalLight3D, environment: Environment, layout: CityLayout
+) -> Dictionary:
+	var weather: WeatherSystem = WeatherSystem.new()
+	weather.name = WEATHER_NODE_NAME
+	stage.add_child(weather)
+	weather.seed_with(current_seed())
+
+	var cycle: DayNightCycle = DayNightCycle.new()
+	cycle.name = CYCLE_NODE_NAME
+	stage.add_child(cycle)
+	cycle.bind(sun, environment, weather)
+
+	var soundscape: Soundscape = Soundscape.new()
+	soundscape.name = SOUNDSCAPE_NODE_NAME
+	stage.add_child(soundscape)
+	soundscape.bind(layout, null, weather)
+
+	return {"cycle": cycle, "weather": weather, "soundscape": soundscape}
 
 
 ## Liga a conversa ao jogador: a câmera que enquadra e o sensor que escolhe o alvo.
@@ -153,6 +198,29 @@ static func _bind_dialogue(player: Node3D, runner: DialogueRunner, prompt: Conte
 	var sensor: InteractionSensor = player.get_node_or_null(^"Sensor") as InteractionSensor
 	runner.bind(camera, sensor)
 	prompt.watch()
+
+
+## Trava o céu numa hora e num tempo fixos. Para quem mede, não para quem joga.
+##
+## `make bench` percorre uma rota fixa justamente para que duas execuções sejam
+## comparáveis — e o histórico é a coluna de números que mostra regressão. Com o relógio
+## andando e o tempo virando por sorteio, uma execução pegaria meio-dia de sol e a seguinte
+## um entardecer de chuva: a diferença de draw calls entre as duas seria clima, e ninguém
+## saberia disso lendo o CSV. A captura de tela tem o mesmo problema pela mesma razão.
+static func pin_sky(stage: Node3D, hour: float) -> void:
+	var weather: WeatherSystem = stage.find_child("Weather", true, false) as WeatherSystem
+	if weather != null:
+		weather.set_auto(false)
+		weather.set_weather(Params.WEATHER_START, true)
+
+	var time: Node = stage.get_node_or_null(^"/root/TimeSystem")
+	if time != null:
+		time.set_time_of_day(hour)
+		time.clock_paused = true
+
+	var cycle: DayNightCycle = stage.find_child(String(CYCLE_NODE_NAME), true, false) as DayNightCycle
+	if cycle != null:
+		cycle.apply_now()
 
 
 ## Estágio plano: céu, sol e chão liso, sem vale.

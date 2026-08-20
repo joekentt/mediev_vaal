@@ -1,9 +1,16 @@
-## Voz por síntese: sílabas curtas, sem gravação e sem texto lido.
+## Voz: sílabas do banco gerado, montadas em fala. Sem gravação e sem texto lido.
 ##
 ## É a mesma escolha estética da locomoção da fase 6. A fala não é atuada, é **sugerida** —
 ## e a 900 triângulos por rosto, com olho e boca sendo planos afundados na face, uma voz
 ## atuada prometeria uma fidelidade que a cara não entrega. O que se quer é o ritmo de
 ## alguém falando, não as palavras.
+##
+## **As sílabas vêm de `assets/generated/audio/voz/`**, sintetizadas por `tools/gen_audio.py`
+## com formantes distintos por raça — F1 e F2 são as duas ressonâncias que o ouvido usa
+## para reconhecer uma vogal, e mover as duas move a identidade de quem fala. Este arquivo
+## não sintetiza mais nada: ele escolhe sílabas e as costura. Sintetizar em GDScript, como
+## na fase 11, custava um laço de milhares de amostras por fala e não tinha como fazer
+## formante — que é exatamente o que faltava para as raças soarem diferentes.
 ##
 ## **O pitch de cada habitante é derivado do nome dele.** Não é sorteado em runtime e não é
 ## guardado em lugar nenhum: `_hash` do nome dá o mesmo número em toda sessão, então o
@@ -16,10 +23,6 @@
 class_name ProceduralVoice
 extends RefCounted
 
-const HALF: float = 0.5
-const MIN_LENGTH: float = 0.001
-## Amplitude máxima de uma amostra de 16 bits.
-const SAMPLE_PEAK: float = 32767.0
 ## Bytes por amostra no formato de 16 bits.
 const BYTES_PER_SAMPLE: int = 2
 ## Divisor de milissegundos para segundos.
@@ -77,40 +80,33 @@ static func line_for(text: String, speaker_id: StringName, posture: StringName) 
 const LETTERS_PER_SYLLABLE: int = 7
 
 
+## Costura uma fala a partir do banco da raça.
+##
+## A escolha das sílabas é semeada pelo nome do falante, então a mesma pessoa dizendo uma
+## frase do mesmo tamanho diz sempre as mesmas sílabas — o que soa como sotaque, e não
+## como sorteio. Sortear a cada fala soaria aleatório; e aleatório não soa errado, o que é
+## exatamente o defeito que ouvido nenhum pega e por isso é o que se tem de decidir aqui.
 static func _synthesize(
 	syllables: int, speaker_id: StringName, posture: StringName
 ) -> AudioStreamWAV:
-	var profile: Dictionary = _profile(posture)
-	var rate: int = Params.VOICE_SAMPLE_RATE
-	var syllable_samples: int = int(float(rate) * float(Params.VOICE_SYLLABLE_MS) / MS_PER_SECOND)
-	var gap_samples: int = int(float(rate) * float(Params.VOICE_GAP_MS) / MS_PER_SECOND)
-	var total: int = syllables * syllable_samples + maxi(syllables - 1, 0) * gap_samples
+	var bank: Array[AudioStreamWAV] = _bank(posture)
+	if bank.is_empty():
+		return null
 
-	# Um gerador por falante, semeado pelo nome: o desenho da fala é dele e não muda.
+	var rate: int = Params.VOICE_SAMPLE_RATE
+	var gap_samples: int = int(float(rate) * float(Params.VOICE_GAP_MS) / MS_PER_SECOND)
+	var gap: PackedByteArray = PackedByteArray()
+	gap.resize(gap_samples * BYTES_PER_SAMPLE)
+
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = absi(String(speaker_id).hash())
 
-	var base: float = float(profile["base_hz"]) * pitch_for(speaker_id, posture)
-	var brightness: float = float(profile["brightness"])
-	var wobble: float = float(profile["wobble"])
-
 	var data: PackedByteArray = PackedByteArray()
-	data.resize(total * BYTES_PER_SAMPLE)
-	var cursor: int = 0
-
-	for syllable: int in syllables:
-		# Cada sílaba tem o seu próprio pitch, em torno do do falante. Sem essa variação a
-		# fala vira um bipe repetido, que é como um rádio quebrado e não como alguém falando.
-		var hz: float = base * (
-			1.0 + rng.randf_range(-Params.VOICE_PITCH_JITTER, Params.VOICE_PITCH_JITTER)
-		)
-		for index: int in syllable_samples:
-			var travel: float = float(index) / float(maxi(syllable_samples, 1))
-			var value: float = _wave(travel, hz, wobble, brightness)
-			cursor = _write(data, cursor, value * _envelope(travel))
-		for _silence: int in gap_samples:
-			if syllable < syllables - 1:
-				cursor = _write(data, cursor, 0.0)
+	for index: int in syllables:
+		var picked: AudioStreamWAV = bank[rng.randi() % bank.size()]
+		data.append_array(picked.data)
+		if index < syllables - 1:
+			data.append_array(gap)
 
 	var stream: AudioStreamWAV = AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
@@ -120,32 +116,32 @@ static func _synthesize(
 	return stream
 
 
-## Uma sílaba: fundamental mais parciais, com o pitch escorregando dentro dela.
+## O banco de uma raça, carregado uma vez por sessão.
 ##
-## O escorregão (`wobble`) é o que faz a sílaba soar como boca e não como oscilador — uma
-## vogal humana nunca fica parada na mesma frequência por cem milissegundos.
-static func _wave(travel: float, hz: float, wobble: float, brightness: float) -> float:
-	var slide: float = hz + sin(travel * PI) * wobble
-	var phase: float = travel * float(Params.VOICE_SYLLABLE_MS) / MS_PER_SECOND * slide * TAU
-	var value: float = sin(phase)
-	# Parciais ímpares, com peso caindo: é o que dá corpo ao som sem virar serra.
-	for harmonic: int in range(2, Params.VOICE_HARMONICS + 1):
-		value += sin(phase * float(harmonic)) * brightness / float(harmonic)
-	return value / float(Params.VOICE_HARMONICS)
+## Pelo nome, sem registro: `voz/<postura>_<n>.wav`. Uma postura nova ganha voz assim que
+## `make audio` gerar o banco dela — nenhuma lista para atualizar aqui.
+static func _bank(posture: StringName) -> Array[AudioStreamWAV]:
+	if _banks.has(posture):
+		return _banks[posture]
+
+	var loaded: Array[AudioStreamWAV] = []
+	for index: int in Params.VOICE_BANK_SYLLABLES:
+		var path: String = "%s/voz/%s_%d.wav" % [Params.AUDIO_DIR, posture, index]
+		if not ResourceLoader.exists(path):
+			continue
+		var syllable: AudioStreamWAV = ResourceLoader.load(path) as AudioStreamWAV
+		if syllable == null:
+			continue
+		if syllable.format != AudioStreamWAV.FORMAT_16_BITS:
+			# A costura é feita nos bytes, e bytes de formatos diferentes não se somam.
+			push_warning("Sílaba fora de 16 bits: %s. Confira o import do Godot." % path)
+			continue
+		loaded.append(syllable)
+
+	if loaded.is_empty():
+		push_warning("Banco de voz vazio para a postura %s. Rode `make audio`." % posture)
+	_banks[posture] = loaded
+	return loaded
 
 
-## Envelope de ataque e queda. Sem ele, cada sílaba começa e termina num estalo — a
-## descontinuidade da onda é audível e soa como falha de áudio, não como fala.
-static func _envelope(travel: float) -> float:
-	if travel < Params.VOICE_ATTACK:
-		return travel / maxf(Params.VOICE_ATTACK, MIN_LENGTH)
-	var release_start: float = 1.0 - Params.VOICE_RELEASE
-	if travel > release_start:
-		return (1.0 - travel) / maxf(Params.VOICE_RELEASE, MIN_LENGTH)
-	return 1.0
-
-
-static func _write(data: PackedByteArray, cursor: int, value: float) -> int:
-	var sample: int = int(clampf(value, -1.0, 1.0) * SAMPLE_PEAK)
-	data.encode_s16(cursor, sample)
-	return cursor + BYTES_PER_SAMPLE
+static var _banks: Dictionary = {}

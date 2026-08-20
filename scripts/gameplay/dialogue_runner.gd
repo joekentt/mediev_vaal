@@ -239,8 +239,14 @@ func _speak(text: String) -> void:
 	var posture: StringName = _posture_of(subject)
 	var speaker_id: StringName = StringName(subject.name)
 
+	var line: AudioStreamWAV = ProceduralVoice.line_for(text, speaker_id, posture)
+	if line == null:
+		# Banco de voz ausente — `make audio` não rodou. A conversa continua muda em vez de
+		# derrubar a fala inteira: quem lê o texto não perde nada, e quem gerou o projeto já
+		# recebeu o aviso do carregador.
+		return
 	_voice.global_position = _partner.focus_point()
-	_voice.stream = ProceduralVoice.line_for(text, speaker_id, posture)
+	_voice.stream = line
 	_voice.pitch_scale = ProceduralVoice.pitch_for(speaker_id, posture)
 	_voice.play()
 

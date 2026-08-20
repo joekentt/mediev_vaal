@@ -1,14 +1,29 @@
 extends Node
 
-## Relógio do mundo. Stub da fase 1.
+## Relógio do mundo: faz a hora andar e anuncia as viradas pelo `EventBus`.
 ##
-## Faz a hora andar e anuncia as viradas pelo `EventBus`. Ainda não move o sol nem troca
-## a iluminação — isso entra com o ciclo dia/noite na fase 3, dentro de `generators/`.
+## Um dia dura `seconds_per_day` segundos reais — 24 minutos de fábrica — e a duração é
+## exportada, não constante, porque é o primeiro número que se quer mexer com o jogo
+## rodando. O valor de fábrica continua vindo de `Params`: o inspetor ajusta, mas quem
+## manda no que nasce é o gerador.
 ##
-## Rotinas de NPC devem escutar `EventBus.hour_changed`, nunca ler o relógio por frame.
+## `time_scale` é a mesma ideia levada ao extremo: multiplica a passagem do tempo sem
+## mexer na duração do dia. É por ele que `make daynight` percorre 24 horas em quatro
+## segundos e mede se a cor deu algum salto no caminho — e é por ele que se olha um pôr do
+## sol inteiro sem esperar por ele.
+##
+## **Nada aqui sabe o que é sol, céu ou névoa.** Este nó publica hora, dia e período;
+## `DayNightCycle` é quem escuta e move a luz. Rotinas de NPC escutam
+## `EventBus.hour_changed` e nunca leem o relógio por quadro — vinte habitantes
+## perguntando as horas a 60 Hz seriam 1200 consultas por segundo para a mesma resposta.
 
 ## Congela o relógio sem pausar o resto do jogo (útil em cutscene).
 var clock_paused: bool = false
+
+## Segundos reais por dia de jogo. De fábrica: `Params.SECONDS_PER_GAME_DAY`.
+@export var seconds_per_day: float = Params.SECONDS_PER_GAME_DAY
+## Multiplicador da passagem do tempo. 1 é o jogo.
+@export var time_scale: float = Params.TIME_SCALE_DEFAULT
 
 var _time_of_day: float = Params.START_HOUR
 var _day: int = 1
@@ -23,11 +38,11 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if clock_paused or Params.SECONDS_PER_GAME_DAY <= 0.0:
+	if clock_paused or seconds_per_day <= 0.0 or time_scale <= 0.0:
 		return
 
-	var hours_per_second: float = float(Params.HOURS_PER_DAY) / Params.SECONDS_PER_GAME_DAY
-	_time_of_day += delta * hours_per_second
+	var hours_per_second: float = float(Params.HOURS_PER_DAY) / seconds_per_day
+	_time_of_day += delta * hours_per_second * clampf(time_scale, 0.0, Params.TIME_SCALE_MAX)
 
 	while _time_of_day >= float(Params.HOURS_PER_DAY):
 		_time_of_day -= float(Params.HOURS_PER_DAY)
@@ -57,21 +72,28 @@ func get_day() -> int:
 
 ## Período do dia atual (ver `Params.Period`).
 ##
-## `PERIOD_START_HOURS` e `Period` saem da mesma tabela em `params.py`, deslocados de um:
-## o dia começa em NIGHT (0) e cada limite ultrapassado avança um período. O último
-## limite (o anoitecer) transborda o enum e fecha o ciclo de volta na noite.
+## O primeiro período — a madrugada — é o que vale enquanto nenhum limite de
+## `PERIOD_START_HOURS` tiver sido ultrapassado. Cada limite ultrapassado avança um.
 func get_period() -> int:
 	var hour: int = get_hour()
-	var period: int = Params.Period.NIGHT
+	var period: int = 0
 	for index: int in Params.PERIOD_START_HOURS.size():
 		if hour >= Params.PERIOD_START_HOURS[index]:
 			period = index + 1
-	if period > Params.Period.DUSK:
-		period = Params.Period.NIGHT
 	return period
 
 
-## Fração do dia (0.0 = meia-noite, 0.5 = meio-dia). Base do futuro ciclo solar.
+## Nome do período atual, em português. Para relatório e prova, não para lógica: quem
+## compara período compara o enum.
+func get_period_name() -> StringName:
+	var period: int = get_period()
+	if period < 0 or period >= Params.PERIOD_NAMES.size():
+		return &""
+	return Params.PERIOD_NAMES[period]
+
+
+## Fração do dia (0.0 = meia-noite, 0.5 = meio-dia). É por aqui que o ciclo amostra as
+## curvas e os gradientes do `DayCycleProfile`.
 func get_day_fraction() -> float:
 	return _time_of_day / float(Params.HOURS_PER_DAY)
 

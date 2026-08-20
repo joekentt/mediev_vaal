@@ -77,6 +77,9 @@ def check_drift() -> None:
     for name, (color_key, roughness, metallic) in P.MATERIALS.items():
         target = gen_materials.OUTPUT_DIR / f"{name}.tres"
         expected[target] = gen_materials._material_resource(name, color_key, roughness, metallic)
+    for name, (glow_key, energy, albedo_key) in P.EMISSIVE_MATERIALS.items():
+        target = gen_materials.OUTPUT_DIR / f"{name}.tres"
+        expected[target] = gen_materials._emissive_resource(name, glow_key, energy, albedo_key)
     for posture, values in P.GAIT_PROFILES.items():
         target = gen_gaits.OUTPUT_DIR / f"{posture}.tres"
         expected[target] = gen_gaits._profile_resource(posture, values)

@@ -67,6 +67,11 @@ func _run() -> void:
 	root.add_child(_camera)
 	_camera.make_current()
 
+	# Céu travado na hora de fábrica e no tempo firme. A rota é fixa para que duas
+	# execuções sejam comparáveis, e um sorteio de clima no meio faria a diferença de draw
+	# calls entre elas ser nuvem — sem que ninguém saiba disso lendo o CSV.
+	WorldGenerator.pin_sky(_root, Params.SHOT_HOUR)
+
 	# Aquecimento: os primeiros frames pagam compilação de shader e alocação, e
 	# entrariam no histórico como uma regressão que não existe.
 	for _frame: int in Params.BENCH_WARMUP_FRAMES:

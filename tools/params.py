@@ -65,6 +65,28 @@ PALETTE: dict[str, str] = {
     "sky_horizon":    "#C9B894",
     "sun":            "#FFF0DA",
     "fog":            "#BAAF95",
+    # Céu, sol e névoa nas outras horas do dia. O ciclo interpola entre estas cores; elas
+    # são chaves de gradiente, não estados discretos — nenhuma delas aparece sozinha na
+    # tela por mais de um instante.
+    "sky_night":      "#111C33",
+    "sky_night_low":  "#1E2A42",
+    "sky_dawn":       "#3E5C82",
+    "sky_dawn_low":   "#D08A5E",
+    "sky_dusk":       "#3A4E7A",
+    "sky_dusk_low":   "#C4713F",
+    "sun_dawn":       "#FFC48A",
+    "sun_dusk":       "#FF9E63",
+    "moon":           "#8FA6C9",
+    "fog_night":      "#1A2438",
+    "fog_dawn":       "#9A8A85",
+    "fog_dusk":       "#8E6E5A",
+    # Luz de dentro de casa vista pela janela, e o vidro do lampião aceso.
+    "window_light":   "#FFB65C",
+    # Céu nublado e o risco de chuva. Cinza de nuvem baixa, não cinza neutro: nuvem tem
+    # o azul do céu por trás dela.
+    "overcast":       "#8E94A0",
+    "overcast_low":   "#A9AAA6",
+    "rain":           "#9FB4C4",
     # Neutros de trabalho
     "ground_default": "#78746A",
     # Branco puro: a base do material dos proxies de LOD. `vertex_color_use_as_albedo`
@@ -94,6 +116,16 @@ MATERIALS: dict[str, tuple[str, float, float]] = {
     # que ignora vertex color e pintava o vale inteiro de cones claros além de 92 m.
     "proxy":     ("proxy_neutral",  1.00, 0.0),
     "debug":     ("debug_magenta",  1.00, 0.0),
+}
+
+# Materiais que emitem luz própria. Separados dos de cima porque têm um campo a mais, e
+# porque o que eles fazem é diferente: a energia de emissão é o **botão da noite**. Um
+# material é compartilhado por toda a cidade, então subir `emission_energy` num deles
+# acende cada janela de cada casa de uma vez — custo por quadro zero, uma propriedade.
+# (nome, cor_do_brilho, energia_máxima, cor_do_albedo)
+EMISSIVE_MATERIALS: dict[str, tuple[str, float, str]] = {
+    "glow": ("window_light", 2.4, "wood_dark"),
+    "rain": ("rain",         0.4, "rain"),
 }
 
 # ---------------------------------------------------------------------------
@@ -314,6 +346,15 @@ AUDIO_BUSES: tuple[tuple[str, float, str], ...] = (
     ("UI",       0.0, "Master"),
 )
 AUDIO_BUS_LAYOUT_PATH = "res://assets/generated/audio/default_bus_layout.tres"
+# Como o Godot importa os .wav gerados. `compress/mode=0` é PCM 16 bits — o padrão do
+# Godot 4.3+ é 2 (QOA, com perda), e recomprimir com perda um banco sintetizado byte a byte
+# é transformação escondida. Ver `tools/gen_project.py::_wav_import`.
+WAV_IMPORT: dict[str, int] = {
+    "compress/mode": 0,
+    "edit/trim": 0,
+    "edit/normalize": 0,
+    "force/mono": 1,
+}
 SFX_POOL_SIZE = 16
 SFX_3D_POOL_SIZE = 24
 MUSIC_CROSSFADE_SEC = 1.5
@@ -336,16 +377,30 @@ CALIBRATION_TONE_FADE_MS = 5.0
 
 HOURS_PER_DAY = 24
 MINUTES_PER_HOUR = 60
-SECONDS_PER_GAME_DAY = 1200.0   # 20 min reais = 1 dia no jogo
+SECONDS_PER_GAME_DAY = 1440.0   # 24 min reais = 1 dia no jogo
 START_HOUR = 8.0
+# Multiplicador do relógio. 1 é o jogo; o resto existe para ver o ciclo inteiro sem
+# esperar 24 minutos, e é por onde a prova acelera o tempo.
+TIME_SCALE_DEFAULT = 1.0
+TIME_SCALE_MAX = 720.0
+# Hora em que toda medição e toda captura travam o céu. Nove da manhã: o sol a 42° ainda
+# dá sombra comprida o bastante para a silhueta ler, e é a primeira chave do dia em que a
+# névoa está no fator 1,0 — que é a névoa sob a qual as fases 2 a 11 foram calibradas.
+# Às 8h o fator ainda é 1,25, e um quarto de névoa a mais embaça a comparação de relevo
+# entre duas seeds, que é justamente o que a tira do vale existe para mostrar.
+SHOT_HOUR = 9.0
 # Limites de período do dia, em horas: (nome, hora_inicial).
+#
+# Cinco períodos, e a madrugada é um período de verdade, separada da noite. Não é
+# preciosismo de nome: o vale às 2h e o vale às 21h têm luz parecida e cidade diferente —
+# às 21h ainda há gente voltando da taverna, às 2h não há ninguém. Um período só para os
+# dois faria a agenda de NPC e a trilha tratarem as duas coisas como uma.
 DAY_PERIODS: tuple[tuple[str, int], ...] = (
-    ("NIGHT", 0),
-    ("DAWN", 5),
-    ("MORNING", 7),
-    ("AFTERNOON", 12),
-    ("DUSK", 17),
-    ("NIGHT_END", 20),
+    ("MADRUGADA", 0),
+    ("AMANHECER", 5),
+    ("DIA", 8),
+    ("ENTARDECER", 17),
+    ("NOITE", 20),
 )
 
 # ---------------------------------------------------------------------------
@@ -1189,6 +1244,12 @@ NPC_SPEAK_COOLDOWN = 26.0       # s entre falas do mesmo NPC
 NPC_SPEAK_CHANCE = 0.35         # chance de falar ao perceber alguém
 NPC_SPEAK_SECONDS = 3.2         # s que a fala fica no ar
 NPC_SPEAK_HEIGHT = 0.35         # m acima da cabeça
+# Distância em que a fala flutuante some. O `Label3D` é de tamanho fixo em tela e sem teste
+# de profundidade — é o que a faz legível de perto e por cima de um ombro —, e sem limite de
+# alcance ela continua do mesmo tamanho a 200 m, atravessando montanha. A vista aérea do
+# vale saía com duas frases gigantes escritas por cima da paisagem. Ninguém tem o que ler
+# numa fala a 30 m: a essa distância ela é ruído sobre o cenário.
+NPC_SPEAK_RANGE = 26.0
 NPC_REACT_SECONDS = 1.4         # s de duração do estado REACT
 
 # Falas por arquétipo. Texto flutuante, não diálogo: a fase 11 é que traz árvore de
@@ -1380,9 +1441,7 @@ VOICE_GAP_MS = 45               # silêncio entre sílabas
 VOICE_SYLLABLES_PER_LINE = 5    # teto de sílabas por fala, independente do texto
 VOICE_ATTACK = 0.18             # fração da sílaba subindo
 VOICE_RELEASE = 0.45            # fração da sílaba descendo
-VOICE_PITCH_JITTER = 0.09       # variação de pitch entre sílabas da mesma fala
 VOICE_VOLUME_DB = -14.0
-VOICE_HARMONICS = 3             # parciais somadas — sem isto a sílaba é um apito
 
 # Perfil por postura do corpo, e não por nome de personagem: a postura já é o que o elenco
 # declara, e é ela que `GaitProfile` também usa. Um corpo novo herda voz sem tabela nova.
@@ -1525,6 +1584,376 @@ DIALOGUE_PROOF_SECONDS = 6.0    # s de rotina observados antes e depois da conve
 DIALOGUE_PROOF_TOLERANCE = 0.35 # m de tolerância na retomada da rotina
 
 # ---------------------------------------------------------------------------
+# Ciclo dia/noite
+# ---------------------------------------------------------------------------
+# O dia inteiro cabe nesta tabela. Cada linha é uma **chave** de gradiente, não um estado:
+# o que o jogador vê às 6h30 não está escrito em lugar nenhum, é a interpolação entre a
+# chave das 5h30 e a das 7h. É o que faz a transição não ter degrau — não há um instante em
+# que o jogo "troca de iluminação".
+#
+# `hora` vai de 0 a 24, e a chave das 24h tem de repetir a das 0h: o gerador reprova se
+# não repetir, porque um degrau na virada da meia-noite é o defeito mais fácil de deixar
+# passar (ninguém está olhando a tela às 0h do jogo).
+#
+# Campos: cor do zênite e do horizonte do céu, cor e energia do sol, cor da névoa,
+# multiplicador da densidade da névoa, energia da luz ambiente, elevação e azimute do sol
+# em graus, e `luz` (0..1) — quanto de dia existe, que é o que acende as janelas.
+DAY_CYCLE_KEYS: tuple[dict, ...] = (
+    {"hour": 0.0,  "zenith": "sky_night", "horizon": "sky_night_low", "sun": "moon",
+     "sun_energy": 0.09, "fog": "fog_night", "fog_scale": 1.9, "ambient": 0.20,
+     "elevation": 34.0, "azimuth": 20.0,  "light": 0.0},
+    {"hour": 4.0,  "zenith": "sky_night", "horizon": "sky_night_low", "sun": "moon",
+     "sun_energy": 0.09, "fog": "fog_night", "fog_scale": 1.9, "ambient": 0.20,
+     "elevation": 22.0, "azimuth": 60.0,  "light": 0.0},
+    {"hour": 5.5,  "zenith": "sky_dawn",  "horizon": "sky_dawn_low",  "sun": "sun_dawn",
+     "sun_energy": 0.35, "fog": "fog_dawn", "fog_scale": 2.4, "ambient": 0.45,
+     "elevation": 4.0,  "azimuth": 84.0,  "light": 0.25},
+    {"hour": 7.0,  "zenith": "sky_zenith", "horizon": "sky_dawn_low", "sun": "sun_dawn",
+     "sun_energy": 0.85, "fog": "fog_dawn", "fog_scale": 1.5, "ambient": 0.80,
+     "elevation": 18.0, "azimuth": 100.0, "light": 0.75},
+    {"hour": 9.0,  "zenith": "sky_zenith", "horizon": "sky_horizon", "sun": "sun",
+     "sun_energy": 1.10, "fog": "fog", "fog_scale": 1.0, "ambient": 1.0,
+     "elevation": 42.0, "azimuth": 130.0, "light": 1.0},
+    {"hour": 13.0, "zenith": "sky_zenith", "horizon": "sky_horizon", "sun": "sun",
+     "sun_energy": 1.20, "fog": "fog", "fog_scale": 0.85, "ambient": 1.0,
+     "elevation": 66.0, "azimuth": 195.0, "light": 1.0},
+    {"hour": 16.5, "zenith": "sky_zenith", "horizon": "sky_horizon", "sun": "sun",
+     "sun_energy": 1.00, "fog": "fog", "fog_scale": 1.0, "ambient": 0.95,
+     "elevation": 34.0, "azimuth": 244.0, "light": 1.0},
+    {"hour": 18.5, "zenith": "sky_dusk",  "horizon": "sky_dusk_low",  "sun": "sun_dusk",
+     "sun_energy": 0.60, "fog": "fog_dusk", "fog_scale": 1.6, "ambient": 0.62,
+     "elevation": 9.0,  "azimuth": 268.0, "light": 0.55},
+    {"hour": 20.0, "zenith": "sky_dusk",  "horizon": "sky_dusk_low",  "sun": "sun_dusk",
+     "sun_energy": 0.22, "fog": "fog_dusk", "fog_scale": 2.2, "ambient": 0.34,
+     "elevation": 3.0,  "azimuth": 284.0, "light": 0.12},
+    {"hour": 21.5, "zenith": "sky_night", "horizon": "sky_night_low", "sun": "moon",
+     "sun_energy": 0.10, "fog": "fog_night", "fog_scale": 2.0, "ambient": 0.22,
+     "elevation": 20.0, "azimuth": 320.0, "light": 0.0},
+    {"hour": 24.0, "zenith": "sky_night", "horizon": "sky_night_low", "sun": "moon",
+     "sun_energy": 0.09, "fog": "fog_night", "fog_scale": 1.9, "ambient": 0.20,
+     "elevation": 34.0, "azimuth": 380.0, "light": 0.0},
+)
+DAY_CYCLE_DIR = "resources/daycycle"
+
+# O sol nunca desce abaixo do horizonte nesta tabela, e isso é escolha, não descuido: à
+# noite ele **é** a lua. Uma segunda DirectionalLight3D para a noite custaria a segunda luz
+# direcional de um orçamento que só tem uma, e apagar a única deixaria a cidade sem nenhuma
+# sombra — o que lê como cinza chapado, não como noite.
+
+# Quanto a fração do dia precisa andar para o ciclo reaplicar tudo. Não é economia
+# cosmética: sem isto, mover sol, céu, névoa e ambiente é trabalho de todo quadro para uma
+# diferença que não cabe em 8 bits de cor. Com 1/3000 de dia, o ciclo reaplica a cada ~29
+# quadros a 60 FPS na velocidade normal — e o degrau de cor que isso introduz é o único
+# degrau possível, que é exatamente o que `make daynight` mede.
+DAY_CYCLE_MIN_STEP = 1.0 / 3000.0
+DAY_CYCLE_LIGHT_ON = 0.35       # abaixo desta luz, janelas e lampiões acendem
+DAY_CYCLE_LIGHT_FADE = 0.18     # largura da transição do aceso, em unidades de luz
+DAY_CYCLE_LANTERN_LIGHTS = 6    # lampiões que ganham luz pontual de verdade, perto da praça
+DAY_CYCLE_LANTERN_RANGE = 9.5   # m de alcance da luz do lampião
+DAY_CYCLE_LANTERN_ENERGY = 1.5
+DAY_CYCLE_LANTERN_HEIGHT = 2.55 # m: a altura da caixa de vidro do poste
+DAY_CYCLE_GLOW_SIZE = 0.34      # m do quadrado emissivo do lampião aceso
+
+# ---------------------------------------------------------------------------
+# Clima
+# ---------------------------------------------------------------------------
+# Três climas, e nenhum deles troca a iluminação: eles **multiplicam** o que o ciclo do dia
+# já decidiu. Nublado ao meio-dia continua sendo meio-dia, com um terço menos de sol. Um
+# clima que escrevesse cor absoluta apagaria o ciclo e faria o dia parar de andar quando
+# começasse a chover.
+WEATHER_DIR = "resources/weather"
+WEATHER_PROFILES: dict[str, dict] = {
+    "ensolarado": {
+        "label": "Ensolarado",
+        "sun_scale": 1.0, "ambient_scale": 1.0, "fog_scale": 1.0,
+        "fog_tint": "fog", "fog_tint_amount": 0.0, "sky_gray": 0.0,
+        "rain": 0.0, "wind_scale": 1.0, "muffle_hz": 20000.0, "ambience_db": 0.0,
+        "weight": 0.5,
+    },
+    "nublado": {
+        "label": "Nublado",
+        "sun_scale": 0.55, "ambient_scale": 0.85, "fog_scale": 1.7,
+        "fog_tint": "overcast", "fog_tint_amount": 0.6, "sky_gray": 0.55,
+        "rain": 0.0, "wind_scale": 1.4, "muffle_hz": 9000.0, "ambience_db": -1.5,
+        "weight": 0.32,
+    },
+    "chuva": {
+        "label": "Chuva",
+        "sun_scale": 0.30, "ambient_scale": 0.70, "fog_scale": 3.1,
+        "fog_tint": "overcast_low", "fog_tint_amount": 0.75, "sky_gray": 0.8,
+        "rain": 1.0, "wind_scale": 1.8, "muffle_hz": 1400.0, "ambience_db": -3.0,
+        "weight": 0.18,
+    },
+}
+WEATHER_START = "ensolarado"
+WEATHER_BLEND_SECONDS = 12.0    # a virada do clima é lenta de propósito: céu não pisca
+# Teto do avanço da virada num quadro só, em segundos. Existe por defeito medido: um quadro
+# longo — carregamento, alt-tab, o assado da navegação terminando — chega com um `delta` de
+# vários segundos, e sem teto ele completa os 12 s da transição de uma vez. O céu saltava de
+# ensolarado para chuva num quadro, e foi assim que `make daynight` o encontrou: 0,78 de
+# energia de sol e 0,18 de cor num quadro só.
+WEATHER_BLEND_MAX_STEP = 0.1
+WEATHER_CHANGE_CHANCE = 0.18    # chance de o clima virar a cada hora anunciada
+WEATHER_RAIN_PARTICLES = 900
+WEATHER_RAIN_BOX = 26.0         # m do lado da caixa de chuva que acompanha a câmera
+WEATHER_RAIN_HEIGHT = 14.0      # m acima do ouvinte de onde a gota nasce
+WEATHER_RAIN_SPEED = 17.0       # m/s de queda
+WEATHER_RAIN_LENGTH = 0.42      # m do risco de cada gota
+WEATHER_RAIN_WIDTH = 0.02
+WEATHER_RAIN_SLANT = 3.0        # m/s de deriva horizontal: chuva de vento, não de chuveiro
+
+# ---------------------------------------------------------------------------
+# Zonas de áudio
+# ---------------------------------------------------------------------------
+# A zona não é lida por quadro: um temporizador a 4 Hz basta para uma fronteira que se
+# atravessa andando a 3 m/s, e a histerese impede que ficar em cima da linha fique
+# alternando leito sonoro duas vezes por segundo.
+AUDIO_ZONES: tuple[str, ...] = ("floresta", "cidade", "interior")
+AUDIO_ZONE_START = "floresta"
+AUDIO_ZONE_CROSSFADE = 2.0      # s — o pedido da fase, e o que mede `make soundscape`
+AUDIO_ZONE_HYSTERESIS = 6.0     # m de folga na fronteira da cidade
+AUDIO_ZONE_POLL_HZ = 4.0
+AUDIO_AMBIENCE_PLAYERS = 2      # dois leitos alternando, como a música
+AUDIO_MUFFLE_LERP = 1.5         # 1/s da aproximação do corte do passa-baixa
+AUDIO_MUFFLE_INTERIOR_HZ = 2200.0
+AUDIO_FILTER_MAX_HZ = 20000.0   # o "sem filtro" do Godot
+
+# Música por contexto. O nome é o do arquivo gerado; quem escolhe é `soundscape.gd`.
+MUSIC_CONTEXTS: tuple[str, ...] = ("exterior", "cidade", "noite")
+MUSIC_NIGHT_PERIODS: tuple[str, ...] = ("NOITE", "MADRUGADA")
+
+# ---------------------------------------------------------------------------
+# Síntese do banco sonoro
+# ---------------------------------------------------------------------------
+# Todo som do jogo nasce aqui, em NumPy, e sai em .wav para assets/generated/audio/.
+# Nenhum arquivo de som é baixado, gravado ou comprado — a mesma regra do resto do
+# projeto, aplicada ao que se ouve.
+AUDIO_DIR = "assets/generated/audio"
+AUDIO_SEED = 71177                # seed da síntese; mesma seed, mesmo byte
+AUDIO_PEAK = 0.89                 # pico normalizado dos .wav, com folga para não clipar
+AUDIO_FADE_MS = 6.0               # rampa das bordas de todo .wav: sem clique, nunca
+
+# Passos por superfície. Cada um é um transiente curto: um golpe de ruído filtrado mais um
+# corpo ressonante. O que separa terra de pedra não é o volume, é onde está a energia —
+# terra é grave e abafada, pedra é aguda e seca, madeira tem duas ressonâncias no meio.
+STEP_SURFACES: dict[str, dict] = {
+    "terra":   {"low": 90.0,  "high": 900.0,  "decay": 0.055, "body": 62.0,  "body_db": -8.0,
+                "click": 0.20},
+    "pedra":   {"low": 700.0, "high": 7200.0, "decay": 0.030, "body": 210.0, "body_db": -15.0,
+                "click": 0.85},
+    "madeira": {"low": 240.0, "high": 3000.0, "decay": 0.070, "body": 148.0, "body_db": -5.0,
+                "click": 0.45},
+}
+STEP_VARIANTS = 3               # três de cada: o mesmo passo repetido lê como metrônomo
+STEP_SECONDS = 0.34
+STEP_PITCH_SPREAD = 0.12        # variação de altura entre variantes da mesma superfície
+
+# Vento em camadas. Três faixas com envelopes lentos e independentes — é a independência
+# que faz o vento não ter período audível. Uma camada só, por mais filtrada que seja, volta
+# a soar igual a cada rajada.
+WIND_SECONDS = 18.0
+WIND_LAYERS: tuple[dict, ...] = (
+    {"low": 40.0,   "high": 260.0,  "gust_hz": 0.07, "depth": 0.55, "db": -6.0},
+    {"low": 300.0,  "high": 1400.0, "gust_hz": 0.13, "depth": 0.70, "db": -12.0},
+    {"low": 1800.0, "high": 7000.0, "gust_hz": 0.23, "depth": 0.85, "db": -20.0},
+)
+
+# Chilro por FM: uma portadora aguda modulada por outra, com índice em envelope. É o
+# caminho clássico para pássaro porque o espectro de um chilro é largo e escorrega — som
+# aditivo precisaria de dezenas de parciais para chegar perto.
+BIRD_CALLS: tuple[dict, ...] = (
+    {"carrier": 3400.0, "ratio": 1.7, "index": 5.0, "chirps": 3, "chirp_ms": 70.0,
+     "gap_ms": 55.0, "sweep": 1.35},
+    {"carrier": 2600.0, "ratio": 2.4, "index": 7.5, "chirps": 2, "chirp_ms": 120.0,
+     "gap_ms": 90.0, "sweep": 0.72},
+    {"carrier": 4200.0, "ratio": 1.2, "index": 3.5, "chirps": 5, "chirp_ms": 45.0,
+     "gap_ms": 40.0, "sweep": 1.08},
+)
+
+# Martelo na bigorna: parciais inarmônicos e decaimento longo. Harmônico inteiro soaria
+# afinado, e bigorna afinada é sino.
+ANVIL_SECONDS = 1.6
+ANVIL_PARTIALS: tuple[tuple[float, float, float], ...] = (
+    # (frequência Hz, decaimento s, ganho relativo)
+    (523.0,  0.90, 1.00),
+    (1187.0, 0.70, 0.62),
+    (1949.0, 0.45, 0.40),
+    (3121.0, 0.28, 0.22),
+    (4703.0, 0.16, 0.12),
+)
+ANVIL_STRIKE_MS = 7.0           # o golpe de ruído que precede o toque do metal
+
+# Porta: rangido de madeira (ruído com ressonância que escorrega) e a tranca no fim.
+DOOR_SECONDS = 1.5
+DOOR_CREAK_FROM = 420.0
+DOOR_CREAK_TO = 260.0
+DOOR_CREAK_Q = 26.0
+DOOR_LATCH_AT = 0.80            # fração da duração em que a tranca bate
+DOOR_LATCH_HZ = 155.0
+
+# Água do poço: gotas com varredura ascendente de altura — é a subida que o ouvido lê como
+# "dentro de um buraco fundo", e não o timbre da gota.
+WATER_SECONDS = 2.4
+WATER_DROPS = 5
+WATER_DROP_HZ = 620.0
+WATER_DROP_SWEEP = 2.6          # razão da subida de altura dentro de cada gota
+WATER_DROP_MS = 90.0
+
+# Murmúrio de multidão: sílabas do banco de voz sobrepostas fora de fase, com alturas
+# espalhadas e agudos cortados. Ninguém tem de entender uma palavra — é justamente o que
+# distingue murmúrio de conversa.
+CROWD_SECONDS = 9.0
+CROWD_VOICES = 22
+CROWD_PITCH_SPREAD = 0.28
+CROWD_LOWPASS = 1700.0
+CROWD_DENSITY = 0.55            # fração do tempo em que há alguém falando
+
+# Banco de sílabas por raça. Os formantes são o que separa uma voz da outra: F1 e F2 são
+# as duas ressonâncias que o ouvido usa para reconhecer uma vogal, e mover as duas move a
+# identidade de quem fala sem mexer na altura da voz.
+VOICE_BANK_SYLLABLES = 8        # sílabas por raça: o suficiente para não repetir numa fala
+VOICE_FORMANTS: dict[str, dict] = {
+    "ereto":   {"f1": 620.0, "f2": 1240.0, "q": 11.0, "breath": 0.10, "tilt": -6.0},
+    "curvado": {"f1": 440.0, "f2":  980.0, "q": 14.0, "breath": 0.18, "tilt": -9.0},
+    "agil":    {"f1": 760.0, "f2": 1720.0, "q":  9.0, "breath": 0.07, "tilt": -4.0},
+}
+VOICE_SYLLABLE_SHAPES: tuple[tuple[float, float], ...] = (
+    # (multiplicador de F1, multiplicador de F2) — as vogais do banco, em ordem fixa.
+    (1.00, 1.00), (0.72, 1.28), (1.24, 0.86), (0.88, 1.55),
+    (1.12, 1.12), (0.65, 0.92), (1.35, 1.40), (0.94, 0.74),
+)
+
+# Leitos de ambiência, um por zona. Cada um é uma receita de mistura do que já foi
+# sintetizado: nada de material novo, nada de arquivo importado.
+AMBIENCE_SECONDS = 22.0
+# Segundos do fim que voltam somados no começo, para o laço fechar sem costura audível.
+AUDIO_LOOP_TAIL = 2.0
+AMBIENCE_BEDS: dict[str, dict] = {
+    "floresta": {"wind_db": -8.0, "wind_lowpass": 9000.0, "birds": 9, "crowd_db": None,
+                 "steps": 0, "creaks": 0},
+    "cidade":   {"wind_db": -17.0, "wind_lowpass": 3200.0, "birds": 3, "crowd_db": -11.0,
+                 "steps": 11, "creaks": 2},
+    "interior": {"wind_db": -24.0, "wind_lowpass": 700.0, "birds": 0, "crowd_db": -25.0,
+                 "steps": 0, "creaks": 4},
+}
+RAIN_SECONDS = 14.0
+RAIN_LOWPASS = 6500.0
+RAIN_HIGHPASS = 400.0
+RAIN_DROPS = 90                 # gotas destacadas por cima do chiado, para não soar estático
+
+# ---------------------------------------------------------------------------
+# Música generativa
+# ---------------------------------------------------------------------------
+# Escala modal, progressão por regras e timbres sintetizados. Não há partitura em lugar
+# nenhum: há um modo, uma tabela de transição entre graus e três instrumentos.
+MUSIC_SAMPLE_RATE = 44_100
+MUSIC_SEED = 90210
+MUSIC_BARS = 16
+MUSIC_BEATS_PER_BAR = 4
+MUSIC_ROOT_HZ = 220.0           # lá3, o centro tonal de tudo que a fase gera
+
+# Modos, em semitons a partir da tônica. Modal e não maior/menor porque o terceiro grau
+# rebaixado com o sexto maior (dórico) é o que soa medieval sem soar triste.
+MUSIC_MODES: dict[str, tuple[int, ...]] = {
+    "dorico":     (0, 2, 3, 5, 7, 9, 10),
+    "eolio":      (0, 2, 3, 5, 7, 8, 10),
+    "mixolidio":  (0, 2, 4, 5, 7, 9, 10),
+}
+
+# Progressão por regras: de que grau se pode ir para que grau, e com que peso. A tônica
+# está em todos os destinos, e nenhum grau leva a si mesmo — é o mínimo para a progressão
+# não empacar e não virar passeio aleatório.
+MUSIC_TRANSITIONS: dict[int, tuple[tuple[int, float], ...]] = {
+    0: ((3, 0.34), (5, 0.26), (4, 0.22), (6, 0.18)),
+    1: ((4, 0.45), (0, 0.30), (6, 0.25)),
+    2: ((5, 0.40), (3, 0.35), (0, 0.25)),
+    3: ((4, 0.38), (0, 0.28), (6, 0.20), (1, 0.14)),
+    4: ((0, 0.46), (5, 0.24), (3, 0.18), (6, 0.12)),
+    5: ((4, 0.36), (0, 0.30), (3, 0.20), (1, 0.14)),
+    6: ((0, 0.52), (4, 0.28), (3, 0.20)),
+}
+
+# Um tema por contexto. `melodia` é a chance de haver nota de melodia em cada tempo —
+# é o botão de densidade, e é ele que faz o tema da noite ser o mesmo material com metade
+# das notas em vez de outra música.
+MUSIC_THEMES: dict[str, dict] = {
+    "exterior": {"mode": "mixolidio", "bpm": 84.0, "root_shift": 0,  "melody": 0.62,
+                 "octave": 2, "drone_db": -19.0, "pluck_db": -13.0, "flute_db": -11.0,
+                 "arp": 2},
+    "cidade":   {"mode": "dorico",    "bpm": 104.0, "root_shift": 2, "melody": 0.74,
+                 "octave": 2, "drone_db": -22.0, "pluck_db": -10.0, "flute_db": -15.0,
+                 "arp": 4},
+    "noite":    {"mode": "eolio",     "bpm": 62.0, "root_shift": -3, "melody": 0.34,
+                 "octave": 1, "drone_db": -15.0, "pluck_db": -17.0, "flute_db": -13.0,
+                 "arp": 1},
+}
+MUSIC_PLUCK_HARMONICS = 9
+MUSIC_PLUCK_DECAY = 1.35        # s do primeiro harmônico; os agudos morrem antes
+MUSIC_FLUTE_BREATH = 0.14
+MUSIC_FLUTE_VIBRATO_HZ = 4.6
+MUSIC_FLUTE_VIBRATO = 0.006
+MUSIC_DRONE_HARMONICS = 6
+MUSIC_LOOP_TAIL = 2.0           # s do fim que voltam somados no começo, para o laço fechar
+
+# Auditoria de afinação: os picos mais fortes do espectro de cada tema têm de cair em graus
+# do modo que o tema declara. É o que separa "gerou som" de "gerou música" — um erro de
+# oitava, uma razão de harmônico trocada ou um modo lido errado saem afinados por acaso em
+# nenhum caso. 25 centésimos é um quarto de semitom: audível como desafinação, e folgado o
+# bastante para a resolução da FFT num tema de 40 s.
+MUSIC_TUNING_PEAKS = 8
+MUSIC_TUNING_CENTS = 25.0
+MUSIC_TUNING_BAND = (60.0, 900.0)   # Hz analisados: onde vivem as fundamentais
+
+# ---------------------------------------------------------------------------
+# Provas do ciclo e do som
+# ---------------------------------------------------------------------------
+
+DAYNIGHT_DIR = "docs/daynight"
+DAYNIGHT_PROOF_SCALE = 360.0    # 24 min de dia viram 4 s: o "acelerar o tempo" do aceite
+DAYNIGHT_SAMPLES = 480          # amostras do dia inteiro na varredura fina
+DAYNIGHT_IDLE_FRAMES = 240      # quadros na velocidade normal, para medir a economia
+
+# **Velocidade** máxima de mudança de cor, em unidades de cor por hora de jogo, por canal.
+#
+# Velocidade e não degrau, e a diferença é a lição desta fase: com o tempo acelerado 360
+# vezes, um dia passa em quatro segundos e o céu **tem** de atravessar a paleta do
+# amanhecer em fração de segundo. Cobrar degrau por quadro seria cobrar que o amanhecer
+# demore, e não que ele seja contínuo.
+#
+# A calibração vem dos dois extremos medidos: a mudança mais rápida do dia — o horizonte
+# virando laranja entre 4h e 5h30 — anda 0,47 por hora; uma descontinuidade de verdade,
+# uma cor que salta de uma amostra para a outra, mediria 10 ou mais nas 480 amostras da
+# varredura. O teto está entre as duas, quatro vezes acima do amanhecer real.
+DAYNIGHT_MAX_COLOR_RATE = 2.0
+DAYNIGHT_MAX_ENERGY_RATE = 2.0
+
+# Quanto o valor aplicado pode saltar **além** do que a interpolação ideal pediria naquele
+# mesmo intervalo. Mede o salto que o sistema introduz — a quantização de
+# `DAY_CYCLE_MIN_STEP`, um quadro perdido, uma virada de clima estourando de uma vez — e
+# não a velocidade com que a paleta anda, que é assunto do teto de cima.
+DAYNIGHT_MAX_COLOR_STEP = 0.02
+DAYNIGHT_MAX_ENERGY_STEP = 0.05
+DAYNIGHT_SETTLE_SECONDS = 70.0  # s de simulação até a cidade responder à hora anunciada
+DAYNIGHT_DAY_HOUR = 12.0
+DAYNIGHT_NIGHT_HOUR = 1.0
+DAYNIGHT_MAX_NIGHT_PLAZA = 0.15 # fração dos habitantes que ainda pode estar na praça às 1h
+
+SOUNDSCAPE_SETTLE_SECONDS = 3.0
+SOUNDSCAPE_TRAVEL_SECONDS = 6.0 # s de cada travessia de fronteira medida
+SOUNDSCAPE_SAMPLE_HZ = 30.0
+# O que é "sem corte perceptível", em número. O total medido é a soma **em potência**
+# (√(a²+b²)) dos dois leitos, que é o que o ouvido escuta como volume.
+#
+# 0,72 não é um número escolhido para passar: é o número que separa as duas implementações
+# possíveis. Um crossfade linear em amplitude — o que se escreve sem pensar — afunda a
+# potência para 0,707 no meio da troca, e é audível como um buraco. Um crossfade de
+# potência constante fica em 1,0 do começo ao fim. O teto está no meio dos dois de
+# propósito: ele reprova o primeiro e aprova o segundo.
+SOUNDSCAPE_MIN_TOTAL = 0.72
+SOUNDSCAPE_MAX_STEP = 0.08
+SOUNDSCAPE_CROSSFADE_TOLERANCE = 0.35   # s de folga na duração medida do crossfade
+
+# ---------------------------------------------------------------------------
 # Geração
 # ---------------------------------------------------------------------------
 
@@ -1590,5 +2019,14 @@ def linear_rgba(key: str, alpha: float = 1.0) -> tuple[float, float, float, floa
 
 
 def period_names() -> tuple[str, ...]:
-    """Nomes únicos de período, na ordem do enum (NIGHT_END é só um limite superior)."""
-    return tuple(name for name, _ in DAY_PERIODS if name != "NIGHT_END")
+    """Nomes de período, na ordem cronológica de um ciclo."""
+    return tuple(name for name, _ in DAY_PERIODS)
+
+
+def period_of(hour: float) -> str:
+    """Período de uma hora do dia. Mesma regra que `TimeSystem.get_period()` no jogo."""
+    current = DAY_PERIODS[0][0]
+    for name, start in DAY_PERIODS:
+        if hour >= start:
+            current = name
+    return current

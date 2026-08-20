@@ -107,7 +107,14 @@ fixed_size = true
 pixel_size = 0.0035
 outline_size = 10
 visible = false
+visibility_range_end = {P.num(P.NPC_SPEAK_RANGE)}
+visibility_range_end_margin = {P.num(P.NPC_SPEAK_RANGE * _SPEECH_FADE)}
+visibility_range_fade_mode = 1
 """
+
+
+# Fração do alcance em que a fala se desvanece em vez de sumir de um quadro para o outro.
+_SPEECH_FADE = 0.15
 
 
 def main() -> list[Path]:

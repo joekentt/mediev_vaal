@@ -57,6 +57,22 @@ const PALETTE: Dictionary = {
 	&"sky_horizon":     Color(0.788235, 0.721569, 0.580392, 1),
 	&"sun":             Color(1.0, 0.941176, 0.854902, 1),
 	&"fog":             Color(0.729412, 0.686275, 0.584314, 1),
+	&"sky_night":       Color(0.066667, 0.109804, 0.2, 1),
+	&"sky_night_low":   Color(0.117647, 0.164706, 0.258824, 1),
+	&"sky_dawn":        Color(0.243137, 0.360784, 0.509804, 1),
+	&"sky_dawn_low":    Color(0.815686, 0.541176, 0.368627, 1),
+	&"sky_dusk":        Color(0.227451, 0.305882, 0.478431, 1),
+	&"sky_dusk_low":    Color(0.768627, 0.443137, 0.247059, 1),
+	&"sun_dawn":        Color(1.0, 0.768627, 0.541176, 1),
+	&"sun_dusk":        Color(1.0, 0.619608, 0.388235, 1),
+	&"moon":            Color(0.560784, 0.65098, 0.788235, 1),
+	&"fog_night":       Color(0.101961, 0.141176, 0.219608, 1),
+	&"fog_dawn":        Color(0.603922, 0.541176, 0.521569, 1),
+	&"fog_dusk":        Color(0.556863, 0.431373, 0.352941, 1),
+	&"window_light":    Color(1.0, 0.713725, 0.360784, 1),
+	&"overcast":        Color(0.556863, 0.580392, 0.627451, 1),
+	&"overcast_low":    Color(0.662745, 0.666667, 0.65098, 1),
+	&"rain":            Color(0.623529, 0.705882, 0.768627, 1),
 	&"ground_default":  Color(0.470588, 0.454902, 0.415686, 1),
 	&"proxy_neutral":   Color(1.0, 1.0, 1.0, 1),
 	&"debug_magenta":   Color(1.0, 0.0, 0.666667, 1),
@@ -77,6 +93,13 @@ const MATERIALS: Dictionary = {
 	&"proxy":    {"color": &"proxy_neutral", "roughness": 1, "metallic": 0},
 	&"debug":    {"color": &"debug_magenta", "roughness": 1, "metallic": 0},
 }
+
+## Materiais que emitem luz. A energia é o teto: quem acende é o ciclo do dia, que
+## multiplica isto pela escuridão da hora.
+const GLOW_MATERIAL: StringName = &"glow"
+const GLOW_ENERGY: float = 2.4
+const RAIN_MATERIAL: StringName = &"rain"
+const RAIN_ENERGY: float = 0.4
 
 # --- Escala do mundo ---------------------------------------------------------
 
@@ -186,14 +209,118 @@ const MUSIC_PLAYER_COUNT: int = 2
 
 const HOURS_PER_DAY: int = 24
 const MINUTES_PER_HOUR: int = 60
-const SECONDS_PER_GAME_DAY: float = 1200
+const SECONDS_PER_GAME_DAY: float = 1440
 const START_HOUR: float = 8
+const TIME_SCALE_DEFAULT: float = 1
+const TIME_SCALE_MAX: float = 720
+const SHOT_HOUR: float = 9
 
 ## Períodos do dia, na ordem cronológica de um ciclo.
-enum Period { NIGHT, DAWN, MORNING, AFTERNOON, DUSK }
+enum Period { MADRUGADA, AMANHECER, DIA, ENTARDECER, NOITE }
 
-## Hora em que cada período começa, exceto NIGHT (que fecha o ciclo).
-const PERIOD_START_HOURS: Array[int] = [5, 7, 12, 17, 20]
+## Hora em que cada período começa, menos o primeiro — que vale até o segundo começar.
+const PERIOD_START_HOURS: Array[int] = [5, 8, 17, 20]
+
+## Nome de cada período, na mesma ordem do enum. Para relatório e prova lerem em português.
+const PERIOD_NAMES: Array[StringName] = [&"MADRUGADA", &"AMANHECER", &"DIA", &"ENTARDECER", &"NOITE"]
+
+# --- Ciclo dia/noite ---------------------------------------------------------
+
+## Chaves do dia inteiro. Não são estados: são pontos de gradiente, e o que se vê entre
+## duas delas é interpolação. `tools/gen_daycycle.py` gera o `.tres` a partir desta mesma
+## tabela — aqui ela existe para a prova poder conferir o que foi gerado.
+const DAY_CYCLE_KEYS: Array[Dictionary] = [
+	{"hour": 0, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.09, "fog_scale": 1.9, "ambient": 0.2, "elevation": 34, "azimuth": 20, "light": 0},
+	{"hour": 4, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.09, "fog_scale": 1.9, "ambient": 0.2, "elevation": 22, "azimuth": 60, "light": 0},
+	{"hour": 5.5, "zenith": Color(0.243137, 0.360784, 0.509804, 1), "horizon": Color(0.815686, 0.541176, 0.368627, 1), "sun": Color(1.0, 0.768627, 0.541176, 1), "fog": Color(0.603922, 0.541176, 0.521569, 1), "sun_energy": 0.35, "fog_scale": 2.4, "ambient": 0.45, "elevation": 4, "azimuth": 84, "light": 0.25},
+	{"hour": 7, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.815686, 0.541176, 0.368627, 1), "sun": Color(1.0, 0.768627, 0.541176, 1), "fog": Color(0.603922, 0.541176, 0.521569, 1), "sun_energy": 0.85, "fog_scale": 1.5, "ambient": 0.8, "elevation": 18, "azimuth": 100, "light": 0.75},
+	{"hour": 9, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.788235, 0.721569, 0.580392, 1), "sun": Color(1.0, 0.941176, 0.854902, 1), "fog": Color(0.729412, 0.686275, 0.584314, 1), "sun_energy": 1.1, "fog_scale": 1, "ambient": 1, "elevation": 42, "azimuth": 130, "light": 1},
+	{"hour": 13, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.788235, 0.721569, 0.580392, 1), "sun": Color(1.0, 0.941176, 0.854902, 1), "fog": Color(0.729412, 0.686275, 0.584314, 1), "sun_energy": 1.2, "fog_scale": 0.85, "ambient": 1, "elevation": 66, "azimuth": 195, "light": 1},
+	{"hour": 16.5, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.788235, 0.721569, 0.580392, 1), "sun": Color(1.0, 0.941176, 0.854902, 1), "fog": Color(0.729412, 0.686275, 0.584314, 1), "sun_energy": 1, "fog_scale": 1, "ambient": 0.95, "elevation": 34, "azimuth": 244, "light": 1},
+	{"hour": 18.5, "zenith": Color(0.227451, 0.305882, 0.478431, 1), "horizon": Color(0.768627, 0.443137, 0.247059, 1), "sun": Color(1.0, 0.619608, 0.388235, 1), "fog": Color(0.556863, 0.431373, 0.352941, 1), "sun_energy": 0.6, "fog_scale": 1.6, "ambient": 0.62, "elevation": 9, "azimuth": 268, "light": 0.55},
+	{"hour": 20, "zenith": Color(0.227451, 0.305882, 0.478431, 1), "horizon": Color(0.768627, 0.443137, 0.247059, 1), "sun": Color(1.0, 0.619608, 0.388235, 1), "fog": Color(0.556863, 0.431373, 0.352941, 1), "sun_energy": 0.22, "fog_scale": 2.2, "ambient": 0.34, "elevation": 3, "azimuth": 284, "light": 0.12},
+	{"hour": 21.5, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.1, "fog_scale": 2, "ambient": 0.22, "elevation": 20, "azimuth": 320, "light": 0},
+	{"hour": 24, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.09, "fog_scale": 1.9, "ambient": 0.2, "elevation": 34, "azimuth": 380, "light": 0},
+]
+
+const DAY_CYCLE_DIR: String = "res://resources/daycycle"
+const DAY_CYCLE_MIN_STEP: float = 0.000333
+const DAY_CYCLE_LIGHT_ON: float = 0.35
+const DAY_CYCLE_LIGHT_FADE: float = 0.18
+const DAY_CYCLE_LANTERN_LIGHTS: int = 6
+const DAY_CYCLE_LANTERN_RANGE: float = 9.5
+const DAY_CYCLE_LANTERN_ENERGY: float = 1.5
+const DAY_CYCLE_LANTERN_HEIGHT: float = 2.55
+const DAY_CYCLE_GLOW_SIZE: float = 0.34
+
+# --- Clima -------------------------------------------------------------------
+
+const WEATHER_DIR: String = "res://resources/weather"
+const WEATHER_IDS: Array[StringName] = [&"ensolarado", &"nublado", &"chuva"]
+const WEATHER_START: StringName = &"ensolarado"
+const WEATHER_BLEND_SECONDS: float = 12
+const WEATHER_BLEND_MAX_STEP: float = 0.1
+const WEATHER_CHANGE_CHANCE: float = 0.18
+const WEATHER_RAIN_PARTICLES: int = 900
+const WEATHER_RAIN_BOX: float = 26
+const WEATHER_RAIN_HEIGHT: float = 14
+const WEATHER_RAIN_SPEED: float = 17
+const WEATHER_RAIN_LENGTH: float = 0.42
+const WEATHER_RAIN_WIDTH: float = 0.02
+const WEATHER_RAIN_SLANT: float = 3
+
+## Peso de sorteio de cada clima quando o tempo vira. Soma não precisa dar 1: o sorteio
+## normaliza. O que importa é a proporção — sol é o dobro de nublado, e chuva é rara.
+const WEATHER_WEIGHTS: Dictionary = {
+	&"ensolarado": 0.5,
+	&"nublado": 0.32,
+	&"chuva": 0.18,
+}
+
+# --- Zonas de áudio ----------------------------------------------------------
+
+const AUDIO_DIR: String = "res://assets/generated/audio"
+const AUDIO_ZONES: Array[StringName] = [&"floresta", &"cidade", &"interior"]
+const AUDIO_ZONE_START: StringName = &"floresta"
+const AUDIO_ZONE_CROSSFADE: float = 2
+const AUDIO_ZONE_HYSTERESIS: float = 6
+const AUDIO_ZONE_POLL_HZ: float = 4
+const AUDIO_AMBIENCE_PLAYERS: int = 2
+const AUDIO_MUFFLE_LERP: float = 1.5
+const AUDIO_MUFFLE_INTERIOR_HZ: float = 2200
+const AUDIO_FILTER_MAX_HZ: float = 20000
+const AUDIO_PEAK: float = 0.89
+
+const MUSIC_CONTEXTS: Array[StringName] = [&"exterior", &"cidade", &"noite"]
+const MUSIC_NIGHT_PERIODS: Array[StringName] = [&"NOITE", &"MADRUGADA"]
+const MUSIC_THEME_IDS: Array[StringName] = [&"exterior", &"cidade", &"noite"]
+
+## Superfícies de passo geradas. O jogo escolhe pelo nome; a prova confere que existem.
+const STEP_SURFACES: Array[StringName] = [&"terra", &"pedra", &"madeira"]
+const STEP_VARIANTS: int = 3
+const VOICE_BANK_SYLLABLES: int = 8
+
+# --- Prova do ciclo e do som -------------------------------------------------
+
+const DAYNIGHT_DIR: String = "res://docs/daynight"
+const DAYNIGHT_PROOF_SCALE: float = 360
+const DAYNIGHT_SAMPLES: int = 480
+const DAYNIGHT_IDLE_FRAMES: int = 240
+const DAYNIGHT_MAX_COLOR_RATE: float = 2
+const DAYNIGHT_MAX_ENERGY_RATE: float = 2
+const DAYNIGHT_MAX_COLOR_STEP: float = 0.02
+const DAYNIGHT_MAX_ENERGY_STEP: float = 0.05
+const DAYNIGHT_SETTLE_SECONDS: float = 70
+const DAYNIGHT_DAY_HOUR: float = 12
+const DAYNIGHT_NIGHT_HOUR: float = 1
+const DAYNIGHT_MAX_NIGHT_PLAZA: float = 0.15
+
+const SOUNDSCAPE_SETTLE_SECONDS: float = 3
+const SOUNDSCAPE_TRAVEL_SECONDS: float = 6
+const SOUNDSCAPE_SAMPLE_HZ: float = 30
+const SOUNDSCAPE_MIN_TOTAL: float = 0.72
+const SOUNDSCAPE_MAX_STEP: float = 0.08
+const SOUNDSCAPE_CROSSFADE_TOLERANCE: float = 0.35
 
 # --- Entrada -----------------------------------------------------------------
 
@@ -526,9 +653,7 @@ const VOICE_GAP_MS: int = 45
 const VOICE_SYLLABLES_PER_LINE: int = 5
 const VOICE_ATTACK: float = 0.18
 const VOICE_RELEASE: float = 0.45
-const VOICE_PITCH_JITTER: float = 0.09
 const VOICE_VOLUME_DB: float = -14
-const VOICE_HARMONICS: int = 3
 
 ## Perfil de voz por postura do corpo. Um corpo novo herda voz sem tabela nova.
 const VOICE_PROFILES: Dictionary = {

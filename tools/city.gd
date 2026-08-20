@@ -112,6 +112,9 @@ func _grow(world_seed: int, with_shots: bool) -> Dictionary:
 	var started: int = Time.get_ticks_msec()
 	WorldGenerator.build_stage(_stage, false)
 	var build_ms: float = float(Time.get_ticks_msec() - started)
+	# Três cidades sob o mesmo céu: o que se compara aqui é traçado, e uma delas medida
+	# debaixo de chuva teria menos draw calls por causa da névoa, não por causa do traçado.
+	WorldGenerator.pin_sky(_stage, Params.SHOT_HOUR)
 
 	var layout: CityLayout = WorldGenerator.last_city
 	var report: Dictionary = WorldGenerator.last_report.duplicate()

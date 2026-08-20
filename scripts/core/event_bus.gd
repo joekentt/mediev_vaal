@@ -86,6 +86,16 @@ signal day_changed(day: int)
 @warning_ignore("unused_signal")
 signal day_period_changed(period: int)
 
+## O tempo virou. Emitido no **começo** da transição, não no fim: quem escuta tem os
+## `WEATHER_BLEND_SECONDS` seguintes para acompanhar a virada, e não um aviso depois dela.
+@warning_ignore("unused_signal")
+signal weather_changed(weather_id: StringName, label: String)
+
+## O ouvinte entrou noutra zona sonora (floresta, cidade, interior). Emitido quando a
+## decisão é tomada; o crossfade que a acompanha leva `AUDIO_ZONE_CROSSFADE` segundos.
+@warning_ignore("unused_signal")
+signal audio_zone_changed(zone: StringName)
+
 # --- Interface ---------------------------------------------------------------
 
 ## Pedido para mostrar uma mensagem curta na tela.

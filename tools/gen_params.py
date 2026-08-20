@@ -194,9 +194,54 @@ def _period_enum() -> str:
 
 
 def _period_bounds() -> str:
-    """Limites de hora para o cálculo de período, em ordem crescente."""
-    bounds = [f"{hour}" for name, hour in P.DAY_PERIODS if name != "NIGHT"]
-    return ", ".join(bounds)
+    """Limites de hora para o cálculo de período, em ordem crescente.
+
+    O primeiro período começa à meia-noite e não precisa de limite: ele é o que vale
+    enquanto nenhum outro limite tiver sido ultrapassado.
+    """
+    return ", ".join(str(hour) for _, hour in P.DAY_PERIODS[1:])
+
+
+def _day_cycle_keys() -> str:
+    lines = []
+    for key in P.DAY_CYCLE_KEYS:
+        lines.append(
+            f'\t{{"hour": {P.num(key["hour"])}, '
+            f'"zenith": {P.color_literal(P.PALETTE[key["zenith"]])}, '
+            f'"horizon": {P.color_literal(P.PALETTE[key["horizon"]])}, '
+            f'"sun": {P.color_literal(P.PALETTE[key["sun"]])}, '
+            f'"fog": {P.color_literal(P.PALETTE[key["fog"]])}, '
+            f'"sun_energy": {P.num(key["sun_energy"])}, '
+            f'"fog_scale": {P.num(key["fog_scale"])}, '
+            f'"ambient": {P.num(key["ambient"])}, '
+            f'"elevation": {P.num(key["elevation"])}, '
+            f'"azimuth": {P.num(key["azimuth"])}, '
+            f'"light": {P.num(key["light"])}}},'
+        )
+    return "\n".join(lines)
+
+
+def _weather_ids() -> str:
+    return ", ".join(f'&"{name}"' for name in P.WEATHER_PROFILES)
+
+
+def _weather_weights() -> str:
+    lines = []
+    for name, spec in P.WEATHER_PROFILES.items():
+        lines.append(f'\t&"{name}": {P.num(spec["weight"])},')
+    return "\n".join(lines)
+
+
+def _names(values) -> str:
+    return ", ".join(f'&"{name}"' for name in values)
+
+
+def _step_surfaces() -> str:
+    return ", ".join(f'&"{name}"' for name in P.STEP_SURFACES)
+
+
+def _music_themes() -> str:
+    return ", ".join(f'&"{name}"' for name in P.MUSIC_THEMES)
 
 
 def render() -> str:
@@ -229,6 +274,13 @@ const PALETTE: Dictionary = {{
 const MATERIALS: Dictionary = {{
 {_material_entries()}
 }}
+
+## Materiais que emitem luz. A energia é o teto: quem acende é o ciclo do dia, que
+## multiplica isto pela escuridão da hora.
+const GLOW_MATERIAL: StringName = &"glow"
+const GLOW_ENERGY: float = {P.num(P.EMISSIVE_MATERIALS["glow"][1])}
+const RAIN_MATERIAL: StringName = &"rain"
+const RAIN_ENERGY: float = {P.num(P.EMISSIVE_MATERIALS["rain"][1])}
 
 # --- Escala do mundo ---------------------------------------------------------
 
@@ -312,12 +364,104 @@ const HOURS_PER_DAY: int = {P.HOURS_PER_DAY}
 const MINUTES_PER_HOUR: int = {P.MINUTES_PER_HOUR}
 const SECONDS_PER_GAME_DAY: float = {P.num(P.SECONDS_PER_GAME_DAY)}
 const START_HOUR: float = {P.num(P.START_HOUR)}
+const TIME_SCALE_DEFAULT: float = {P.num(P.TIME_SCALE_DEFAULT)}
+const TIME_SCALE_MAX: float = {P.num(P.TIME_SCALE_MAX)}
+const SHOT_HOUR: float = {P.num(P.SHOT_HOUR)}
 
 ## Períodos do dia, na ordem cronológica de um ciclo.
 enum Period {{ {_period_enum()} }}
 
-## Hora em que cada período começa, exceto NIGHT (que fecha o ciclo).
+## Hora em que cada período começa, menos o primeiro — que vale até o segundo começar.
 const PERIOD_START_HOURS: Array[int] = [{_period_bounds()}]
+
+## Nome de cada período, na mesma ordem do enum. Para relatório e prova lerem em português.
+const PERIOD_NAMES: Array[StringName] = [{_names(P.period_names())}]
+
+# --- Ciclo dia/noite ---------------------------------------------------------
+
+## Chaves do dia inteiro. Não são estados: são pontos de gradiente, e o que se vê entre
+## duas delas é interpolação. `tools/gen_daycycle.py` gera o `.tres` a partir desta mesma
+## tabela — aqui ela existe para a prova poder conferir o que foi gerado.
+const DAY_CYCLE_KEYS: Array[Dictionary] = [
+{_day_cycle_keys()}
+]
+
+const DAY_CYCLE_DIR: String = "res://{P.DAY_CYCLE_DIR}"
+const DAY_CYCLE_MIN_STEP: float = {P.num(P.DAY_CYCLE_MIN_STEP)}
+const DAY_CYCLE_LIGHT_ON: float = {P.num(P.DAY_CYCLE_LIGHT_ON)}
+const DAY_CYCLE_LIGHT_FADE: float = {P.num(P.DAY_CYCLE_LIGHT_FADE)}
+const DAY_CYCLE_LANTERN_LIGHTS: int = {P.DAY_CYCLE_LANTERN_LIGHTS}
+const DAY_CYCLE_LANTERN_RANGE: float = {P.num(P.DAY_CYCLE_LANTERN_RANGE)}
+const DAY_CYCLE_LANTERN_ENERGY: float = {P.num(P.DAY_CYCLE_LANTERN_ENERGY)}
+const DAY_CYCLE_LANTERN_HEIGHT: float = {P.num(P.DAY_CYCLE_LANTERN_HEIGHT)}
+const DAY_CYCLE_GLOW_SIZE: float = {P.num(P.DAY_CYCLE_GLOW_SIZE)}
+
+# --- Clima -------------------------------------------------------------------
+
+const WEATHER_DIR: String = "res://{P.WEATHER_DIR}"
+const WEATHER_IDS: Array[StringName] = [{_weather_ids()}]
+const WEATHER_START: StringName = &"{P.WEATHER_START}"
+const WEATHER_BLEND_SECONDS: float = {P.num(P.WEATHER_BLEND_SECONDS)}
+const WEATHER_BLEND_MAX_STEP: float = {P.num(P.WEATHER_BLEND_MAX_STEP)}
+const WEATHER_CHANGE_CHANCE: float = {P.num(P.WEATHER_CHANGE_CHANCE)}
+const WEATHER_RAIN_PARTICLES: int = {P.WEATHER_RAIN_PARTICLES}
+const WEATHER_RAIN_BOX: float = {P.num(P.WEATHER_RAIN_BOX)}
+const WEATHER_RAIN_HEIGHT: float = {P.num(P.WEATHER_RAIN_HEIGHT)}
+const WEATHER_RAIN_SPEED: float = {P.num(P.WEATHER_RAIN_SPEED)}
+const WEATHER_RAIN_LENGTH: float = {P.num(P.WEATHER_RAIN_LENGTH)}
+const WEATHER_RAIN_WIDTH: float = {P.num(P.WEATHER_RAIN_WIDTH)}
+const WEATHER_RAIN_SLANT: float = {P.num(P.WEATHER_RAIN_SLANT)}
+
+## Peso de sorteio de cada clima quando o tempo vira. Soma não precisa dar 1: o sorteio
+## normaliza. O que importa é a proporção — sol é o dobro de nublado, e chuva é rara.
+const WEATHER_WEIGHTS: Dictionary = {{
+{_weather_weights()}
+}}
+
+# --- Zonas de áudio ----------------------------------------------------------
+
+const AUDIO_DIR: String = "res://{P.AUDIO_DIR}"
+const AUDIO_ZONES: Array[StringName] = [{_names(P.AUDIO_ZONES)}]
+const AUDIO_ZONE_START: StringName = &"{P.AUDIO_ZONE_START}"
+const AUDIO_ZONE_CROSSFADE: float = {P.num(P.AUDIO_ZONE_CROSSFADE)}
+const AUDIO_ZONE_HYSTERESIS: float = {P.num(P.AUDIO_ZONE_HYSTERESIS)}
+const AUDIO_ZONE_POLL_HZ: float = {P.num(P.AUDIO_ZONE_POLL_HZ)}
+const AUDIO_AMBIENCE_PLAYERS: int = {P.AUDIO_AMBIENCE_PLAYERS}
+const AUDIO_MUFFLE_LERP: float = {P.num(P.AUDIO_MUFFLE_LERP)}
+const AUDIO_MUFFLE_INTERIOR_HZ: float = {P.num(P.AUDIO_MUFFLE_INTERIOR_HZ)}
+const AUDIO_FILTER_MAX_HZ: float = {P.num(P.AUDIO_FILTER_MAX_HZ)}
+const AUDIO_PEAK: float = {P.num(P.AUDIO_PEAK)}
+
+const MUSIC_CONTEXTS: Array[StringName] = [{_names(P.MUSIC_CONTEXTS)}]
+const MUSIC_NIGHT_PERIODS: Array[StringName] = [{_names(P.MUSIC_NIGHT_PERIODS)}]
+const MUSIC_THEME_IDS: Array[StringName] = [{_music_themes()}]
+
+## Superfícies de passo geradas. O jogo escolhe pelo nome; a prova confere que existem.
+const STEP_SURFACES: Array[StringName] = [{_step_surfaces()}]
+const STEP_VARIANTS: int = {P.STEP_VARIANTS}
+const VOICE_BANK_SYLLABLES: int = {P.VOICE_BANK_SYLLABLES}
+
+# --- Prova do ciclo e do som -------------------------------------------------
+
+const DAYNIGHT_DIR: String = "res://{P.DAYNIGHT_DIR}"
+const DAYNIGHT_PROOF_SCALE: float = {P.num(P.DAYNIGHT_PROOF_SCALE)}
+const DAYNIGHT_SAMPLES: int = {P.DAYNIGHT_SAMPLES}
+const DAYNIGHT_IDLE_FRAMES: int = {P.DAYNIGHT_IDLE_FRAMES}
+const DAYNIGHT_MAX_COLOR_RATE: float = {P.num(P.DAYNIGHT_MAX_COLOR_RATE)}
+const DAYNIGHT_MAX_ENERGY_RATE: float = {P.num(P.DAYNIGHT_MAX_ENERGY_RATE)}
+const DAYNIGHT_MAX_COLOR_STEP: float = {P.num(P.DAYNIGHT_MAX_COLOR_STEP)}
+const DAYNIGHT_MAX_ENERGY_STEP: float = {P.num(P.DAYNIGHT_MAX_ENERGY_STEP)}
+const DAYNIGHT_SETTLE_SECONDS: float = {P.num(P.DAYNIGHT_SETTLE_SECONDS)}
+const DAYNIGHT_DAY_HOUR: float = {P.num(P.DAYNIGHT_DAY_HOUR)}
+const DAYNIGHT_NIGHT_HOUR: float = {P.num(P.DAYNIGHT_NIGHT_HOUR)}
+const DAYNIGHT_MAX_NIGHT_PLAZA: float = {P.num(P.DAYNIGHT_MAX_NIGHT_PLAZA)}
+
+const SOUNDSCAPE_SETTLE_SECONDS: float = {P.num(P.SOUNDSCAPE_SETTLE_SECONDS)}
+const SOUNDSCAPE_TRAVEL_SECONDS: float = {P.num(P.SOUNDSCAPE_TRAVEL_SECONDS)}
+const SOUNDSCAPE_SAMPLE_HZ: float = {P.num(P.SOUNDSCAPE_SAMPLE_HZ)}
+const SOUNDSCAPE_MIN_TOTAL: float = {P.num(P.SOUNDSCAPE_MIN_TOTAL)}
+const SOUNDSCAPE_MAX_STEP: float = {P.num(P.SOUNDSCAPE_MAX_STEP)}
+const SOUNDSCAPE_CROSSFADE_TOLERANCE: float = {P.num(P.SOUNDSCAPE_CROSSFADE_TOLERANCE)}
 
 # --- Entrada -----------------------------------------------------------------
 
@@ -631,9 +775,7 @@ const VOICE_GAP_MS: int = {P.VOICE_GAP_MS}
 const VOICE_SYLLABLES_PER_LINE: int = {P.VOICE_SYLLABLES_PER_LINE}
 const VOICE_ATTACK: float = {P.num(P.VOICE_ATTACK)}
 const VOICE_RELEASE: float = {P.num(P.VOICE_RELEASE)}
-const VOICE_PITCH_JITTER: float = {P.num(P.VOICE_PITCH_JITTER)}
 const VOICE_VOLUME_DB: float = {P.num(P.VOICE_VOLUME_DB)}
-const VOICE_HARMONICS: int = {P.VOICE_HARMONICS}
 
 ## Perfil de voz por postura do corpo. Um corpo novo herda voz sem tabela nova.
 const VOICE_PROFILES: Dictionary = {{

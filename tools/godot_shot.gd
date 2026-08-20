@@ -57,6 +57,10 @@ func _capture() -> void:
 	root.add_child(_camera)
 	_camera.make_current()
 
+	# Mesma hora e mesmo tempo em toda execução: as capturas existem para comparar com as
+	# da rodada passada, e duas fotos do mesmo ponto sob céus diferentes não se comparam.
+	WorldGenerator.pin_sky(_root, Params.SHOT_HOUR)
+
 	var written: Array[String] = []
 	for shot: Array in Params.SHOT_POINTS:
 		var shot_name: String = String(shot[0])

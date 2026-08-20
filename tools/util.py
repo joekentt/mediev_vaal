@@ -31,6 +31,21 @@ def write_if_changed(relative_path: str | Path, content: str) -> list[Path]:
     return [path]
 
 
+def write_bytes_if_changed(relative_path: str | Path, payload: bytes) -> list[Path]:
+    """Igual ao de cima, para arquivo binário. Devolve o que de fato foi tocado.
+
+    Existe pelo mesmo motivo que o irmão de texto: `make audio` roda dentro de `make all`,
+    e reescrever quarenta .wav idênticos a cada execução faria o Godot reimportar todos
+    eles — o que custa mais que gerar.
+    """
+    path = ROOT / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.read_bytes() == payload:
+        return []
+    path.write_bytes(payload)
+    return [path]
+
+
 def report(step: str, written: list[Path]) -> None:
     """Log uniforme dos geradores."""
     if not written:

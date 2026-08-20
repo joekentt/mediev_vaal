@@ -28,6 +28,15 @@ TimeSystem="*res://scripts/core/time_system.gd"
 gdscript/warnings/inferred_declaration=1
 gdscript/warnings/untyped_declaration=1
 
+[importer_defaults]
+
+wav={
+"compress/mode": 0,
+"edit/trim": 0,
+"edit/normalize": 0,
+"force/mono": 1
+}
+
 [display]
 
 window/size/viewport_width=1920
