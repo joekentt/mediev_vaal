@@ -50,6 +50,9 @@ var _race: RaceApplier = null
 @export var locomotion_path: NodePath = NodePath()
 @export var camera_path: NodePath = NodePath()
 @export var race_path: NodePath = NodePath()
+## O sensor que escolhe o alvo de interação. Nó, e não busca: quem monta a cena é o
+## gerador, e um controlador que procurasse o sensor na árvore acharia o do NPC ao lado.
+@export var sensor_path: NodePath = NodePath()
 
 @export_group("Velocidade")
 @export var walk_speed: float = Params.PLAYER_WALK_SPEED
@@ -82,9 +85,10 @@ var _race: RaceApplier = null
 @export var jump_buffer: float = Params.PLAYER_JUMP_BUFFER
 
 @export_group("Interação")
+## Até onde a mão vai quando não há alvo nenhum. Quem escolhe alvo é o `InteractionSensor`,
+## e a máscara de camada mora nele — este arquivo deixou de ter opinião sobre onde procurar
+## no dia em que a busca deixou de ser um raio.
 @export var interact_range: float = Params.PLAYER_INTERACT_RANGE
-## Camadas onde a interação procura alvo.
-@export_flags_3d_physics var interact_mask: int = Params.LAYER_INTERACTABLE
 
 
 func _ready() -> void:
@@ -265,25 +269,24 @@ func _detect_landing(previous_vertical: float) -> void:
 	_was_on_floor = grounded
 
 
+## Aperta o verbo no alvo que o sensor escolheu.
+##
+## O alvo **não** é decidido aqui, e não é decidido por raio. Raio pede mira, e num jogo de
+## terceira pessoa mirar um NPC a dois metros exige apontar para um ponto que o próprio
+## corpo do jogador tapa — ver `InteractionSensor`, que escolhe por centralidade na tela.
 func _begin_interact() -> void:
 	_interact_left = (
 		Params.INTERACT_REACH_TIME + Params.INTERACT_HOLD_TIME + Params.INTERACT_RETURN_TIME
 	)
 	var origin: Vector3 = global_position + Vector3.UP * _body_height() * Params.CAMERA_TARGET_HEIGHT
-	var ahead: Vector3 = origin + (global_transform.basis * Vector3.FORWARD) * interact_range
+	var point: Vector3 = origin + (global_transform.basis * Vector3.FORWARD) * interact_range
 
-	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
-	var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(origin, ahead)
-	query.collision_mask = interact_mask
-	query.exclude = [get_rid()]
-	var hit: Dictionary = space.intersect_ray(query)
-
-	var point: Vector3 = ahead
-	if not hit.is_empty():
-		point = hit["position"]
-		var target: Node3D = hit["collider"] as Node3D
-		if target != null:
-			EventBus.interaction_requested.emit(target)
+	var sensor: InteractionSensor = get_node_or_null(sensor_path) as InteractionSensor
+	var target: Interactable = sensor.target() if sensor != null else null
+	if target != null:
+		point = target.focus_point()
+		target.interact(self)
+		EventBus.interaction_requested.emit(target)
 
 	if _legs != null:
 		_legs.request_interact(point)

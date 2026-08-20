@@ -68,6 +68,10 @@ signal dialogue_requested(dialogue_id: StringName, speaker: Node3D)
 @warning_ignore("unused_signal")
 signal dialogue_finished(dialogue_id: StringName)
 
+## Reputação com uma facção mudou. Emitido por `GameState.add_reputation`.
+@warning_ignore("unused_signal")
+signal reputation_changed(faction: StringName, value: int)
+
 # --- Tempo -------------------------------------------------------------------
 
 ## A hora do dia virou (0..23).

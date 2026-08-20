@@ -35,6 +35,7 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | Traçado da cidade (sítio, muralha, ruas, lotes) | `generators/city_gen.gd` | `Params` + seed |
 | Prédios, props, interiores e marcadores | `generators/city_builder.gd` | `CityLayout` |
 | `resources/schedules/*.tres` | `tools/gen_schedules.py` | `tools/params.py` |
+| `resources/dialogues/*.tres` | `tools/gen_dialogues.py` | `tools/params.py` |
 | `scenes/npc/npc.tscn` | `tools/gen_npc.py` | `tools/params.py` |
 | População: corpo, rotina e posto | `generators/population_gen.gd` | `CityLayout` + seed |
 | Fumaça, pássaros, folhas, cachorro, martelo | `generators/ambient_gen.gd` | `Params` + seed |
@@ -47,6 +48,7 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `docs/valley/seeds.png` + medidas | `tools/valley.gd` | `Params.VALLEY_SEEDS` |
 | `docs/shots/city/*.png` + medidas | `tools/city.gd` | `Params.CITY_SEEDS` |
 | Medidas de 3 min de praça | `tools/population.gd` | `Params.POPULATION_*` |
+| Medidas da conversa e da rotina | `tools/dialogue.gd` | `Params.DIALOGUE_*` |
 
 Consequências práticas:
 
@@ -78,6 +80,7 @@ make project  project.godot
 make materials  biblioteca de materiais do Godot
 make gaits    perfis de marcha em resources/gaits/
 make schedules agendas diárias em resources/schedules/
+make dialogues árvores de conversa em resources/dialogues/
 make npc      cena do habitante em scenes/npc/
 make player   cena do jogador em scenes/player/
 make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
@@ -93,6 +96,7 @@ make playtest dirige o jogador e mede o controle          (precisa do Godot)
 make valley   gera duas seeds e prova que diferem e são jogáveis (precisa do Godot)
 make city     gera 3 cidades, valida e captura 6 pontos; `make city SEED=123` (precisa do Godot)
 make population roda 3 min de praça e prova que a cidade tem vida (precisa do Godot)
+make dialogue prova que conversar não quebra a rotina do habitante (precisa do Godot)
 make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
@@ -369,6 +373,55 @@ Três coisas que só apareceram medindo, e que o código explica no lugar:
 quanta gente se move em cada janela, quanto do percurso de cada um cai em terreno novo,
 quantos entalos houve e quantas amostras caíram dentro de uma parede.
 
+### A conversa
+
+Falar com alguém atravessa seis peças, e nenhuma delas conhece mais de uma vizinha. É o
+que faz a sétima conversa custar um arquivo `.tres` e zero linha de código.
+
+- **`Interactable` é a interface inteira**: um verbo, um prompt e quem é o dono. Com
+  árvore, interagir emite `dialogue_requested`; sem ela, só anuncia `interacted` — é o que
+  deixa um baú da fase 9 existir sem inventar uma conversa de uma linha para ele. É
+  `Area3D` porque o alvo é escolhido por sobreposição: varrer a cena atrás de nós de um
+  tipo custaria uma busca por quadro para responder o que a física já responde de graça.
+- **O alvo é o mais central na tela, não o mais próximo.** Numa praça com três habitantes
+  encostados, distância escolhe o que o ombro do jogador está tapando. A pontuação mistura
+  centralidade e proximidade, e recusa qualquer coisa fora do cone de
+  `INTERACT_MAX_ANGLE_DEG` — sem esse corte, `unproject_position` devolve o centro da tela
+  para um alvo **atrás** da câmera, e o prompt oferece conversar com quem ficou para trás.
+- **`DialogueTree` não conhece o `GameState`.** As condições são avaliadas contra um
+  dicionário de contexto que o chamador monta. Não é purismo: identificador de autoload não
+  existe quando um script de ferramenta compila — a fase 10 já pagou esse preço — e com
+  contexto explícito a prova percorre uma árvore inteira sem abrir o jogo.
+- **A rotina volta exatamente onde parou.** `pause_routine()` guarda estado, tarefa,
+  destino, posto e temporizador; `resume_routine()` devolve os cinco. Só o caminho se
+  refaz, e não por escolha: o agente descartou o dele enquanto ninguém andava. Recalcular a
+  agenda na saída faria um habitante a meio caminho da taverna recomeçar da casa dele, e o
+  jogador veria a conversa apagar o que ele estava fazendo.
+- **A voz é sintetizada, e o pitch sai do id.** Sílabas curtas com pitch escorregando
+  dentro de cada uma, perfil por postura do corpo — a mesma chave que a marcha usa, então
+  um corpo novo herda voz sem tabela nova. O pitch vem do hash do nome do habitante: um
+  sorteio por fala soaria aleatório, não soaria errado, e é o defeito que ouvido nenhum
+  pega.
+- **A UI nasce em código, inclusive o painel.** Uma cena de UI montada no editor seria o
+  primeiro arquivo do repositório que ninguém revisa, e o próximo tamanho de fonte não
+  voltaria para `params.py`.
+
+Duas coisas que a ordem de execução ensinou:
+
+- **A rotina volta antes de a câmera soltar.** Ao contrário, há um quadro em que o
+  habitante já está andando e a câmera ainda está no ombro dele, e o corte fica visível.
+- **A árvore é carregada pelo nome, e o nome é o caminho.** Sem registro, sem `match`, sem
+  lista para atualizar. `make dialogue` prova isso abrindo `guarda_portao`, que é a árvore
+  que caminho de código nenhum referencia: se um registro escondido tivesse aparecido em
+  algum lugar do projeto, é ela que ficaria muda.
+
+`make dialogue` prova a fase em número: pega um habitante **em rotina** — não um parado,
+que não provaria retomada nenhuma —, grava estado e destino, conversa com ele, e cobra que
+os dois voltem e que ele volte a andar. De quebra percorre a máquina de condições na ordem
+em que uma partida a percorreria: uma escolha trancada por flag abre depois que outra
+conversa acende a flag, e uma trancada por reputação abre depois que a escolha do ferreiro
+paga os pontos.
+
 ---
 
 ## Estrutura
@@ -399,6 +452,9 @@ quantos entalos houve e quantas amostras caíram dentro de uma parede.
   city.py           roda city.gd e cobra os critérios de aceite da cidade
   population.gd     roda 3 min de praça e mede vida, entalo e parede (Godot)
   population.py     roda population.gd e cobra os critérios de aceite da vida
+  gen_dialogues.py  árvores de conversa em resources/dialogues/, com auditoria do grafo
+  dialogue.gd       conversa com um habitante em rotina e mede a retomada (Godot)
+  dialogue.py       roda dialogue.gd e cobra os critérios de aceite da conversa
   bench.py          roda bench.gd e traduz falha de ambiente
 /generators         geração em GDScript (runtime)
   mesh_builder.gd   ArrayMesh flat + vertex color; valida orçamento de tris
@@ -427,11 +483,19 @@ quantos entalos houve e quantas amostras caíram dentro de uma parede.
     npc_director.gd           quem custa física e quem custa quase nada
     npc_schedule.gd           Resource de agenda, um por arquétipo
     ambient_life.gd           pássaros, cachorro e martelo, sem IA
+    interactable.gd           a interface: um verbo, um prompt e quem é o dono
+    interaction_sensor.gd     escolhe o alvo por centralidade na tela
+    dialogue_tree.gd          Resource de conversa: nós, condições e escolhas
+    dialogue_runner.gd        costura árvore, NPC, câmera, voz e GameState
+    procedural_voice.gd       sílabas sintetizadas, pitch estável derivado do id
   ai/               comportamento de NPC
-  ui/               telas e widgets
+  ui/               telas e widgets, construídos em código
+    context_prompt.gd         a linha do rodapé que aparece e some
+    dialogue_screen.gd        painel, fala revelada e escolhas
 /resources          dados de design gerados (raças, diálogos, itens), versionados
   gaits/            perfis de marcha por postura (gerado, versionado)
   schedules/        agendas diárias por arquétipo (gerado, versionado)
+  dialogues/        árvores de conversa (gerado, versionado)
 /assets/generated   DERIVADO — no .gitignore, volta com `make all`
   kit/              as 34 peças em .glb + manifest.json
   characters/       os 7 humanoides em .glb com esqueleto + manifest.json
@@ -592,6 +656,7 @@ Camadas de física (nomeadas em `params.PHYSICS_LAYERS`, acessíveis por `Params
 | `jump` | Espaço | A |
 | `interact` | E | X |
 | `pause` | Esc | Start |
+| `dialogue_choice_1` … `dialogue_choice_4` | 1 / 2 / 3 / 4 | Direcional |
 | `camera_toggle_capture` | Tab | — |
 | `camera_zoom_in` / `camera_zoom_out` | Roda do mouse | — |
 | `debug_screenshot` | F12 | — |
@@ -666,11 +731,18 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    com teto de 40 corpos com física. Mais a vida ambiente sem IA: fumaça, pássaros,
    folhas, varal ao vento, cachorro em ronda e o martelo da ferraria no compasso do
    artesão. `make population` mede três minutos de praça.
-   *As fases 5, 7, 9 e 11 continuam abertas; não há diálogo com escolhas nem comércio.*
+   *As fases 5, 7 e 9 continuam abertas.*
 
-11. **Raças, facções e diálogo**
-    `Resource`s de raça e povo gerados em `resources/`, árvores de diálogo geradas, UI de
-    conversa, reputação por facção.
+11. **Raças, facções e diálogo** ✅ *(esta etapa, fora de ordem e a pedido explícito)*
+    `Interactable` com alvo escolhido por centralidade na tela, prompt de contexto e tela
+    de conversa construídos em código, `DialogueTree` em `resources/dialogues/` com
+    condições de flag, raça e reputação e até quatro escolhas por nó, enquadramento em
+    ombro durante a fala, rotina do habitante pausada e devolvida onde parou, voz
+    sintetizada com pitch estável por id e silenciável, e reputação por facção no
+    `GameState`. `make dialogue` mede a retomada da rotina.
+    *As fases 5, 7 e 9 continuam abertas. A raça ainda é o corpo de `CHARACTER_ROSTER`, e
+    não um `Resource` de povo: a facção existe como reputação que o diálogo lê e escreve,
+    e nada fora do diálogo depende dela ainda.*
 
 12. **Áudio procedural**
     Síntese de música e efeitos em `tools/gen_audio.py` — o mesmo caminho do tom de
@@ -687,7 +759,8 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 
 **Nenhuma fase está concluída sem `make preview` e `make bench` rodados, com os números
 colados no commit** — mais o alvo de medição que a fase tenha criado (`make anim`,
-`make playtest`, `make valley`, `make city`, `make population`). Não é cerimônia. Um gerador não tem como saber se o que ele produziu
+`make playtest`, `make valley`, `make city`, `make population`, `make dialogue`). Não é
+cerimônia. Um gerador não tem como saber se o que ele produziu
 parece certo, e uma contagem de triângulos dentro do orçamento não impede uma árvore de
 sair torta ou um chão de sumir por winding invertido — as duas coisas já aconteceram
 neste projeto e foram encontradas *olhando*, não lendo log.
@@ -738,6 +811,16 @@ neste projeto e foram encontradas *olhando*, não lendo log.
   terreno dá dez vezes isso;
 - entalos e amostras dentro de parede, que têm de ser zero nos dois casos;
 - o pico de corpos com física, contra o teto de `BUDGET["active_npcs"]`.
+
+`make dialogue` responde "a conversa devolve a rotina?":
+
+- o estado e o destino do habitante antes e depois da conversa, e o quanto o destino andou
+  entre os dois — tolerância em metro, não "voltou a andar";
+- quanto ele andou nos segundos antes, durante e depois: antes prova que havia rotina,
+  durante prova que a pausa parou o corpo, depois prova que a retomada religou a física;
+- quantas escolhas cada nó ofereceu antes e depois de a flag acender e de a reputação ser
+  paga, que é a máquina de condições medida contra o estado que a partida acumulou;
+- a estabilidade do pitch por id, que é o único critério de voz que ouvido nenhum pega.
 
 `make bench` responde "cabe?":
 

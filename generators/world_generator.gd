@@ -24,6 +24,8 @@ const TERRAIN_ROOT_NAME: StringName = &"Terrain"
 const SCATTER_ROOT_NAME: StringName = &"Scatter"
 const NAV_ROOT_NAME: StringName = &"Navigation"
 const PLAYER_NODE_NAME: StringName = &"Player"
+const DIALOGUE_NODE_NAME: StringName = &"Dialogue"
+const PROMPT_NODE_NAME: StringName = &"Prompt"
 const GROUND_MATERIAL: StringName = &"ground"
 const GROUND_MESH_CATEGORY: StringName = &"stage_ground"
 const MANIFEST_PATH: String = "/world/world_manifest.json"
@@ -124,11 +126,33 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	}
 	last_report.merge(layout.report)
 
+	# A conversa por último: ela precisa da câmera e do sensor do jogador, e nas provas sem
+	# jogador ela existe do mesmo jeito — a prova de diálogo abre uma árvore sem ninguém
+	# apertar tecla nenhuma.
+	var runner: DialogueRunner = DialogueRunner.new()
+	runner.name = DIALOGUE_NODE_NAME
+	stage.add_child(runner)
+	var prompt: ContextPrompt = ContextPrompt.new()
+	prompt.name = PROMPT_NODE_NAME
+	stage.add_child(prompt)
+
 	if with_player:
 		var player: Node3D = build_player(field)
 		if player != null:
 			stage.add_child(player)
+			_bind_dialogue(player, runner, prompt)
 	return stage
+
+
+## Liga a conversa ao jogador: a câmera que enquadra e o sensor que escolhe o alvo.
+##
+## Feito aqui e não dentro do runner porque o runner não procura o jogador na árvore — nas
+## provas não há jogador nenhum, e um runner que dependesse de achar um ficaria mudo.
+static func _bind_dialogue(player: Node3D, runner: DialogueRunner, prompt: ContextPrompt) -> void:
+	var camera: ThirdPersonCamera = player.get_node_or_null(^"CameraArm") as ThirdPersonCamera
+	var sensor: InteractionSensor = player.get_node_or_null(^"Sensor") as InteractionSensor
+	runner.bind(camera, sensor)
+	prompt.watch()
 
 
 ## Estágio plano: céu, sol e chão liso, sem vale.

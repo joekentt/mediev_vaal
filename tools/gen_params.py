@@ -154,6 +154,29 @@ def _npc_archetypes() -> str:
     return "\n".join(lines)
 
 
+def _voice_profiles() -> str:
+    lines = []
+    for posture, values in P.VOICE_PROFILES.items():
+        fields = ", ".join(f'&"{k}": {float(v)!r}' for k, v in values.items())
+        lines.append(f'\t&"{posture}": {{{fields}}},')
+    return "\n".join(lines)
+
+
+def _factions() -> str:
+    return ", ".join(f'&"{name}"' for name in P.FACTIONS)
+
+
+def _dialogue_ids() -> str:
+    return ", ".join(f'&"{name}"' for name in P.DIALOGUES)
+
+
+def _dialogue_by_archetype() -> str:
+    lines = []
+    for archetype, tree in P.DIALOGUE_BY_ARCHETYPE.items():
+        lines.append(f'\t&"{archetype}": &"{tree}",')
+    return "\n".join(lines)
+
+
 def _npc_lines() -> str:
     lines = []
     for name, phrases in P.NPC_LINES.items():
@@ -554,6 +577,78 @@ const POPULATION_WINDOW: float = {P.num(P.POPULATION_WINDOW)}
 const POPULATION_MIN_NOVELTY: float = {P.num(P.POPULATION_MIN_NOVELTY)}
 const POPULATION_MAX_STUCK: int = {P.POPULATION_MAX_STUCK}
 const POPULATION_MAX_CLIPPING: int = {P.POPULATION_MAX_CLIPPING}
+
+# --- Interação ---------------------------------------------------------------
+
+const INTERACT_SENSE_RADIUS: float = {P.num(P.INTERACT_SENSE_RADIUS)}
+const INTERACT_MAX_ANGLE_DEG: float = {P.num(P.INTERACT_MAX_ANGLE_DEG)}
+const INTERACT_REFRESH_HZ: float = {P.num(P.INTERACT_REFRESH_HZ)}
+const INTERACT_CENTER_BIAS: float = {P.num(P.INTERACT_CENTER_BIAS)}
+const INTERACT_FOCUS_HEIGHT: float = {P.num(P.INTERACT_FOCUS_HEIGHT)}
+const INTERACT_AREA_RADIUS: float = {P.num(P.INTERACT_AREA_RADIUS)}
+
+const PROMPT_FADE_SECONDS: float = {P.num(P.PROMPT_FADE_SECONDS)}
+const PROMPT_BOTTOM_MARGIN: int = {P.PROMPT_BOTTOM_MARGIN}
+const PROMPT_FONT_SIZE: int = {P.PROMPT_FONT_SIZE}
+const PROMPT_KEY_FONT_SIZE: int = {P.PROMPT_KEY_FONT_SIZE}
+const PROMPT_ALPHA: float = {P.num(P.PROMPT_ALPHA)}
+
+# --- Diálogo -----------------------------------------------------------------
+
+const DIALOGUE_DIR: String = "res://{P.DIALOGUE_DIR}"
+const DIALOGUE_MAX_CHOICES: int = {P.DIALOGUE_MAX_CHOICES}
+const DIALOGUE_PANEL_WIDTH: float = {P.num(P.DIALOGUE_PANEL_WIDTH)}
+const DIALOGUE_PANEL_MARGIN: int = {P.DIALOGUE_PANEL_MARGIN}
+const DIALOGUE_FADE_SECONDS: float = {P.num(P.DIALOGUE_FADE_SECONDS)}
+const DIALOGUE_TEXT_SPEED: float = {P.num(P.DIALOGUE_TEXT_SPEED)}
+const DIALOGUE_FONT_SIZE: int = {P.DIALOGUE_FONT_SIZE}
+const DIALOGUE_SPEAKER_FONT_SIZE: int = {P.DIALOGUE_SPEAKER_FONT_SIZE}
+const DIALOGUE_CHOICE_FONT_SIZE: int = {P.DIALOGUE_CHOICE_FONT_SIZE}
+const DIALOGUE_PANEL_ALPHA: float = {P.num(P.DIALOGUE_PANEL_ALPHA)}
+
+const DIALOGUE_CAMERA_BLEND: float = {P.num(P.DIALOGUE_CAMERA_BLEND)}
+const DIALOGUE_CAMERA_SIDE: float = {P.num(P.DIALOGUE_CAMERA_SIDE)}
+const DIALOGUE_CAMERA_BACK: float = {P.num(P.DIALOGUE_CAMERA_BACK)}
+const DIALOGUE_CAMERA_RISE: float = {P.num(P.DIALOGUE_CAMERA_RISE)}
+const DIALOGUE_CAMERA_FOV: float = {P.num(P.DIALOGUE_CAMERA_FOV)}
+
+## Toda árvore gerada, pelo nome. Não é registro: ninguém precisa desta lista para abrir
+## uma conversa — o runner monta o caminho a partir do identificador e carrega. Ela existe
+## para a prova poder percorrer o que foi gerado, inclusive as árvores que caminho de código
+## nenhum referencia.
+const DIALOGUE_IDS: Array[StringName] = [{_dialogue_ids()}]
+
+## Qual árvore cada arquétipo usa. Nome, não caminho — o runner monta o caminho.
+const DIALOGUE_BY_ARCHETYPE: Dictionary = {{
+{_dialogue_by_archetype()}
+}}
+
+# --- Voz procedural ----------------------------------------------------------
+
+const VOICE_SAMPLE_RATE: int = {P.VOICE_SAMPLE_RATE}
+const VOICE_SYLLABLE_MS: int = {P.VOICE_SYLLABLE_MS}
+const VOICE_GAP_MS: int = {P.VOICE_GAP_MS}
+const VOICE_SYLLABLES_PER_LINE: int = {P.VOICE_SYLLABLES_PER_LINE}
+const VOICE_ATTACK: float = {P.num(P.VOICE_ATTACK)}
+const VOICE_RELEASE: float = {P.num(P.VOICE_RELEASE)}
+const VOICE_PITCH_JITTER: float = {P.num(P.VOICE_PITCH_JITTER)}
+const VOICE_VOLUME_DB: float = {P.num(P.VOICE_VOLUME_DB)}
+const VOICE_HARMONICS: int = {P.VOICE_HARMONICS}
+
+## Perfil de voz por postura do corpo. Um corpo novo herda voz sem tabela nova.
+const VOICE_PROFILES: Dictionary = {{
+{_voice_profiles()}
+}}
+
+# --- Facções -----------------------------------------------------------------
+
+const FACTIONS: Array[StringName] = [{_factions()}]
+const REPUTATION_MIN: int = {P.REPUTATION_MIN}
+const REPUTATION_MAX: int = {P.REPUTATION_MAX}
+const REPUTATION_START: int = {P.REPUTATION_START}
+
+const DIALOGUE_PROOF_SECONDS: float = {P.num(P.DIALOGUE_PROOF_SECONDS)}
+const DIALOGUE_PROOF_TOLERANCE: float = {P.num(P.DIALOGUE_PROOF_TOLERANCE)}
 
 # --- Jogador -----------------------------------------------------------------
 

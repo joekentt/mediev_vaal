@@ -471,6 +471,82 @@ const POPULATION_MIN_NOVELTY: float = 0.05
 const POPULATION_MAX_STUCK: int = 0
 const POPULATION_MAX_CLIPPING: int = 0
 
+# --- Interação ---------------------------------------------------------------
+
+const INTERACT_SENSE_RADIUS: float = 3.6
+const INTERACT_MAX_ANGLE_DEG: float = 62
+const INTERACT_REFRESH_HZ: float = 12
+const INTERACT_CENTER_BIAS: float = 0.75
+const INTERACT_FOCUS_HEIGHT: float = 1.55
+const INTERACT_AREA_RADIUS: float = 0.7
+
+const PROMPT_FADE_SECONDS: float = 0.16
+const PROMPT_BOTTOM_MARGIN: int = 84
+const PROMPT_FONT_SIZE: int = 20
+const PROMPT_KEY_FONT_SIZE: int = 17
+const PROMPT_ALPHA: float = 0.86
+
+# --- Diálogo -----------------------------------------------------------------
+
+const DIALOGUE_DIR: String = "res://resources/dialogues"
+const DIALOGUE_MAX_CHOICES: int = 4
+const DIALOGUE_PANEL_WIDTH: float = 0.58
+const DIALOGUE_PANEL_MARGIN: int = 56
+const DIALOGUE_FADE_SECONDS: float = 0.2
+const DIALOGUE_TEXT_SPEED: float = 52
+const DIALOGUE_FONT_SIZE: int = 21
+const DIALOGUE_SPEAKER_FONT_SIZE: int = 17
+const DIALOGUE_CHOICE_FONT_SIZE: int = 18
+const DIALOGUE_PANEL_ALPHA: float = 0.82
+
+const DIALOGUE_CAMERA_BLEND: float = 3.2
+const DIALOGUE_CAMERA_SIDE: float = 0.85
+const DIALOGUE_CAMERA_BACK: float = 2.35
+const DIALOGUE_CAMERA_RISE: float = 0.18
+const DIALOGUE_CAMERA_FOV: float = 46
+
+## Toda árvore gerada, pelo nome. Não é registro: ninguém precisa desta lista para abrir
+## uma conversa — o runner monta o caminho a partir do identificador e carrega. Ela existe
+## para a prova poder percorrer o que foi gerado, inclusive as árvores que caminho de código
+## nenhum referencia.
+const DIALOGUE_IDS: Array[StringName] = [&"aldeao_saudacao", &"ferreiro_encomenda", &"guarda_portao"]
+
+## Qual árvore cada arquétipo usa. Nome, não caminho — o runner monta o caminho.
+const DIALOGUE_BY_ARCHETYPE: Dictionary = {
+	&"comerciante": &"aldeao_saudacao",
+	&"artesao": &"ferreiro_encomenda",
+	&"crianca": &"aldeao_saudacao",
+}
+
+# --- Voz procedural ----------------------------------------------------------
+
+const VOICE_SAMPLE_RATE: int = 22050
+const VOICE_SYLLABLE_MS: int = 95
+const VOICE_GAP_MS: int = 45
+const VOICE_SYLLABLES_PER_LINE: int = 5
+const VOICE_ATTACK: float = 0.18
+const VOICE_RELEASE: float = 0.45
+const VOICE_PITCH_JITTER: float = 0.09
+const VOICE_VOLUME_DB: float = -14
+const VOICE_HARMONICS: int = 3
+
+## Perfil de voz por postura do corpo. Um corpo novo herda voz sem tabela nova.
+const VOICE_PROFILES: Dictionary = {
+	&"ereto": {&"base_hz": 132.0, &"spread": 0.16, &"wobble": 5.0, &"brightness": 0.55},
+	&"curvado": {&"base_hz": 104.0, &"spread": 0.12, &"wobble": 3.2, &"brightness": 0.35},
+	&"agil": {&"base_hz": 178.0, &"spread": 0.22, &"wobble": 7.5, &"brightness": 0.75},
+}
+
+# --- Facções -----------------------------------------------------------------
+
+const FACTIONS: Array[StringName] = [&"vilarejo", &"guarda", &"mercadores"]
+const REPUTATION_MIN: int = -100
+const REPUTATION_MAX: int = 100
+const REPUTATION_START: int = 0
+
+const DIALOGUE_PROOF_SECONDS: float = 6
+const DIALOGUE_PROOF_TOLERANCE: float = 0.35
+
 # --- Jogador -----------------------------------------------------------------
 
 const PLAYER_SCENE: String = "res://scenes/player/player.tscn"

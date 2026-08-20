@@ -3,11 +3,12 @@
 ; Fonte:      tools/params.py
 ; Regenerar:  make all
 
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/npc_controller.gd" id="1_npc"]
 [ext_resource type="Script" path="res://scripts/gameplay/race_applier.gd" id="2_race"]
 [ext_resource type="Script" path="res://scripts/gameplay/procedural_locomotion.gd" id="3_legs"]
+[ext_resource type="Script" path="res://scripts/gameplay/interactable.gd" id="4_talk"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.3
@@ -15,6 +16,9 @@ height = 1.75
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_sense"]
 radius = 6.5
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_talk"]
+radius = 0.7
 
 [node name="NPC" type="CharacterBody3D"]
 collision_layer = 4
@@ -49,6 +53,16 @@ collision_mask = 6
 [node name="SenseShape" type="CollisionShape3D" parent="Sense"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.875, 0)
 shape = SubResource("SphereShape3D_sense")
+
+[node name="Talk" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 0)
+script = ExtResource("4_talk")
+prompt_text = "Conversar"
+focus_height = 1.55
+owner_path = NodePath("..")
+
+[node name="TalkShape" type="CollisionShape3D" parent="Talk"]
+shape = SubResource("SphereShape3D_talk")
 
 [node name="Speech" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)

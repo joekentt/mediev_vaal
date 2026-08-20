@@ -106,6 +106,30 @@ debug_screenshot={
 "events": [Object(InputEventKey,"device":-1,"physical_keycode":4194343,"pressed":false)
 ]
 }
+dialogue_choice_1={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":49,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":11,"pressed":false)
+]
+}
+dialogue_choice_2={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":50,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":14,"pressed":false)
+]
+}
+dialogue_choice_3={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":51,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":12,"pressed":false)
+]
+}
+dialogue_choice_4={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":52,"pressed":false)
+, Object(InputEventJoypadButton,"device":-1,"button_index":13,"pressed":false)
+]
+}
 
 [layer_names]
 

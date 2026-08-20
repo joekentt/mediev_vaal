@@ -75,6 +75,13 @@ static func populate(
 		npc.schedule = schedules.get(spec["schedule"], null)
 		npc.places = _places_for(layout, spec, homes, stalls, index)
 
+		# A conversa vem do arquétipo, por nome, e o runner carrega pelo nome. É isto que
+		# faz "acrescentar conversa não exige tocar em código" ser verdade: um `.tres` novo
+		# e uma linha em DIALOGUE_BY_ARCHETYPE bastam.
+		var talk: Interactable = npc.get_node_or_null(^"Talk") as Interactable
+		if talk != null and Params.DIALOGUE_BY_ARCHETYPE.has(name_key):
+			talk.dialogue = DialogueRunner.load_tree(Params.DIALOGUE_BY_ARCHETYPE[name_key])
+
 		var body: StringName = _pick_body(spec, roster, rng)
 		var race: RaceApplier = npc.get_node(npc.race_path) as RaceApplier
 		if race != null:

@@ -1,0 +1,19 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_dialogues.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_resource type="Resource" script_class="DialogueTree" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/dialogue_tree.gd" id="1_dialogue_tree"]
+
+[resource]
+script = ExtResource("1_dialogue_tree")
+id = &"guarda_portao"
+speaker = "Guarda"
+start = &"inicio"
+nodes = Array[Dictionary]([
+	{"id": &"inicio", "text": "O portão fecha ao anoitecer. Não me faça procurar você.", "choices": [{"text": "Estarei dentro.", "goto": &"dentro"}, {"text": "O vilarejo me conhece.", "goto": &"conhecido", "conditions": [{"type": &"reputacao", "key": &"vilarejo", "compare": ">=", "value": 5}]}, {"text": "Nada a declarar.", "goto": &""}]},
+	{"id": &"dentro", "text": "Bom. A muralha não é enfeite.", "choices": [{"text": "Entendido.", "goto": &""}]},
+	{"id": &"conhecido", "text": "Conhece. E é por isso que estou avisando em vez de mandando.", "choices": [{"text": "Agradeço.", "goto": &""}]},
+])

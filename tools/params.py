@@ -357,9 +357,14 @@ KEY = {
     "W": 87, "A": 65, "S": 83, "D": 68, "E": 69,
     "SPACE": 32, "SHIFT": 4194325, "ESCAPE": 4194305, "TAB": 4194306,
     "F12": 4194343,
+    # Dígitos da fileira de cima: são os números das escolhas de diálogo.
+    "1": 49, "2": 50, "3": 51, "4": 52,
 }
 # Botões de gamepad (Godot JoyButton).
-JOY = {"A": 0, "B": 1, "X": 2, "Y": 3, "START": 6, "L3": 7, "R3": 8}
+JOY = {
+    "A": 0, "B": 1, "X": 2, "Y": 3, "START": 6, "L3": 7, "R3": 8,
+    "DPAD_UP": 11, "DPAD_DOWN": 12, "DPAD_LEFT": 13, "DPAD_RIGHT": 14,
+}
 # Botões de mouse.
 MOUSE = {"WHEEL_UP": 4, "WHEEL_DOWN": 5}
 
@@ -377,6 +382,14 @@ INPUT_MAP: dict[str, dict] = {
     "camera_zoom_in":        {"mouse_buttons": ["WHEEL_UP"]},
     "camera_zoom_out":       {"mouse_buttons": ["WHEEL_DOWN"]},
     "debug_screenshot":      {"keys": ["F12"]},
+    # Escolhas de diálogo: números 1 a 4, e o D-pad no gamepad. Quatro porque
+    # DIALOGUE_MAX_CHOICES é quatro — acrescentar uma quinta escolha exigiria uma ação
+    # nova aqui, e é bom que exija: cinco opções numa tela de conversa é onde a leitura
+    # começa a virar formulário.
+    "dialogue_choice_1":     {"keys": ["1"], "joy_buttons": ["DPAD_UP"]},
+    "dialogue_choice_2":     {"keys": ["2"], "joy_buttons": ["DPAD_RIGHT"]},
+    "dialogue_choice_3":     {"keys": ["3"], "joy_buttons": ["DPAD_DOWN"]},
+    "dialogue_choice_4":     {"keys": ["4"], "joy_buttons": ["DPAD_LEFT"]},
 }
 
 # A câmera pelo mouse não é ação: é InputEventMouseMotion lido pelo controlador.
@@ -1300,6 +1313,216 @@ POPULATION_WINDOW = 20.0        # s da janela em que se cobra movimento
 POPULATION_MIN_NOVELTY = 0.05
 POPULATION_MAX_STUCK = 0        # NPCs entalados tolerados
 POPULATION_MAX_CLIPPING = 0     # NPCs dentro de parede tolerados
+
+# ---------------------------------------------------------------------------
+# Interação e diálogo
+# ---------------------------------------------------------------------------
+
+# --- Alvo de interação -------------------------------------------------------
+# A detecção é por `Area3D`, e não por raio da câmera. Raio pede mira; num jogo de terceira
+# pessoa com câmera atrás do ombro, mirar um NPC a dois metros exige apontar para um ponto
+# que o próprio corpo do jogador tapa. A área pega tudo por perto e o desempate é por
+# centralidade na tela, que é o que o olho já está fazendo sem pensar.
+
+INTERACT_SENSE_RADIUS = 3.6     # m do raio da área de interação
+INTERACT_MAX_ANGLE_DEG = 62.0   # fora deste cone à frente da câmera, não é alvo
+INTERACT_REFRESH_HZ = 12.0      # reavaliações do alvo por segundo
+INTERACT_CENTER_BIAS = 0.75     # peso da centralidade contra a distância no desempate
+# Altura do ponto para onde a câmera de conversa olha. Fixa, e não medida do corpo: o
+# elenco vai de 1,45 m a 2,05 m e o enquadramento de ombro tolera essa faixa inteira —
+# medir por corpo custaria uma dependência do RaceApplier para mover a mira 20 cm.
+INTERACT_FOCUS_HEIGHT = 1.55    # m acima da origem do interlocutor
+INTERACT_AREA_RADIUS = 0.7      # m da área do interagível
+
+# --- Prompt de contexto ------------------------------------------------------
+# Discreto quer dizer: uma linha, no rodapé, que aparece e some. Sem caixa, sem ícone
+# grande, sem barra. O que informa é o verbo; o resto é ruído em cima do cenário.
+
+PROMPT_FADE_SECONDS = 0.16
+PROMPT_BOTTOM_MARGIN = 84       # px acima do rodapé
+PROMPT_FONT_SIZE = 20
+PROMPT_KEY_FONT_SIZE = 17
+PROMPT_ALPHA = 0.86
+
+# --- Diálogo -----------------------------------------------------------------
+
+DIALOGUE_DIR = "resources/dialogues"
+DIALOGUE_MAX_CHOICES = 4        # teto de escolhas por nó; o gerador reprova acima disto
+DIALOGUE_PANEL_WIDTH = 0.58     # fração da largura da tela
+DIALOGUE_PANEL_MARGIN = 56      # px do rodapé
+DIALOGUE_FADE_SECONDS = 0.2
+DIALOGUE_TEXT_SPEED = 52.0      # caracteres por segundo do texto que se revela
+DIALOGUE_FONT_SIZE = 21
+DIALOGUE_SPEAKER_FONT_SIZE = 17
+DIALOGUE_CHOICE_FONT_SIZE = 18
+DIALOGUE_PANEL_ALPHA = 0.82
+
+# Enquadramento de ombro. A câmera não corta: ela desliza para um ponto atrás do ombro do
+# jogador, olhando para a cabeça do interlocutor. Corte seco em jogo de terceira pessoa
+# custa a orientação espacial que o jogador levou a caminhada inteira para construir.
+DIALOGUE_CAMERA_BLEND = 3.2     # 1/s da aproximação exponencial ao enquadramento
+DIALOGUE_CAMERA_SIDE = 0.85     # m de deslocamento lateral (o ombro)
+DIALOGUE_CAMERA_BACK = 2.35     # m atrás do jogador
+DIALOGUE_CAMERA_RISE = 0.18     # m acima da altura de olhar
+DIALOGUE_CAMERA_FOV = 46.0      # graus: mais fechado que o de jogo, para aproximar os dois
+
+# --- Voz procedural ----------------------------------------------------------
+# Sílabas curtas, sintetizadas, sem gravação e sem texto lido. É a mesma escolha estética
+# da locomoção: a fala não é atuada, é sugerida — e a 900 triângulos por rosto, uma voz
+# atuada prometeria uma fidelidade que a cara não entrega.
+#
+# O pitch de cada NPC é **derivado do nome dele**, não sorteado em runtime: o mesmo
+# habitante tem a mesma voz em toda sessão, e ninguém precisa guardar isso em lugar nenhum.
+
+VOICE_SAMPLE_RATE = 22050
+VOICE_SYLLABLE_MS = 95          # duração de uma sílaba
+VOICE_GAP_MS = 45               # silêncio entre sílabas
+VOICE_SYLLABLES_PER_LINE = 5    # teto de sílabas por fala, independente do texto
+VOICE_ATTACK = 0.18             # fração da sílaba subindo
+VOICE_RELEASE = 0.45            # fração da sílaba descendo
+VOICE_PITCH_JITTER = 0.09       # variação de pitch entre sílabas da mesma fala
+VOICE_VOLUME_DB = -14.0
+VOICE_HARMONICS = 3             # parciais somadas — sem isto a sílaba é um apito
+
+# Perfil por postura do corpo, e não por nome de personagem: a postura já é o que o elenco
+# declara, e é ela que `GaitProfile` também usa. Um corpo novo herda voz sem tabela nova.
+VOICE_PROFILES: dict[str, dict[str, float]] = {
+    "ereto":   {"base_hz": 132.0, "spread": 0.16, "wobble": 5.0, "brightness": 0.55},
+    "curvado": {"base_hz": 104.0, "spread": 0.12, "wobble": 3.2, "brightness": 0.35},
+    "agil":    {"base_hz": 178.0, "spread": 0.22, "wobble": 7.5, "brightness": 0.75},
+}
+
+# --- Facções e reputação -----------------------------------------------------
+# Reputação é um inteiro por facção, guardado no `GameState`. Diálogo lê e escreve; nada
+# mais no projeto depende dela ainda — comércio e consequência são de fases posteriores.
+
+FACTIONS: tuple[str, ...] = ("vilarejo", "guarda", "mercadores")
+REPUTATION_MIN = -100
+REPUTATION_MAX = 100
+REPUTATION_START = 0
+
+# --- Diálogos de exemplo -----------------------------------------------------
+# Três árvores, e a do ferreiro mexe em reputação. Elas existem para provar o formato, não
+# para contar história: a fase de escrita é outra.
+#
+# Formato de um nó: id, falante, texto, condições e até DIALOGUE_MAX_CHOICES escolhas.
+# Uma condição é (tipo, chave, comparação, valor). Tipos: "flag", "reputacao", "raca".
+# Um efeito é (tipo, chave, valor). Tipos: "flag", "reputacao".
+DIALOGUES: dict[str, dict] = {
+    "aldeao_saudacao": {
+        "speaker": "Aldeão",
+        "start": "inicio",
+        "nodes": (
+            {
+                "id": "inicio",
+                "text": "Bom dia. O vale anda quieto desde a última feira.",
+                "choices": (
+                    {"text": "Quieto como?", "goto": "quieto"},
+                    {"text": "Onde fica a ferraria?", "goto": "ferraria"},
+                    {"text": "Bom dia.", "goto": ""},
+                ),
+            },
+            {
+                "id": "quieto",
+                "text": "Menos carroça na estrada. Ninguém sabe dizer por quê.",
+                "effects": ({"type": "flag", "key": "ouviu_do_silencio", "value": True},),
+                "choices": ({"text": "Entendo.", "goto": ""},),
+            },
+            {
+                "id": "ferraria",
+                "text": "Segue a rua principal até a praça; o martelo faz o resto.",
+                "choices": ({"text": "Obrigado.", "goto": ""},),
+            },
+        ),
+    },
+    "ferreiro_encomenda": {
+        "speaker": "Ferreiro",
+        "start": "inicio",
+        "nodes": (
+            {
+                "id": "inicio",
+                "text": "Se veio pedir pressa, já aviso: o ferro não escuta.",
+                "choices": (
+                    {"text": "Vim só olhar.", "goto": "olhar"},
+                    {
+                        "text": "Posso ajudar no fole.",
+                        "goto": "ajuda",
+                        "effects": (
+                            {"type": "reputacao", "key": "vilarejo", "value": 5},
+                        ),
+                    },
+                    {
+                        "text": "Soube que a estrada anda vazia.",
+                        "goto": "estrada",
+                        "conditions": (
+                            {"type": "flag", "key": "ouviu_do_silencio",
+                             "compare": "==", "value": True},
+                        ),
+                    },
+                ),
+            },
+            {
+                "id": "olhar",
+                "text": "Olhe de longe. Fagulha não pergunta de quem é o braço.",
+                "choices": ({"text": "Justo.", "goto": ""},),
+            },
+            {
+                "id": "ajuda",
+                "text": "Então segure firme. Isto aqui vira foice antes do meio-dia.",
+                "choices": ({"text": "Combinado.", "goto": ""},),
+            },
+            {
+                "id": "estrada",
+                "text": "Vazia há três feiras. Encomenda parada é ferro parado.",
+                "choices": ({"text": "Vou ficar de olho.", "goto": ""},),
+            },
+        ),
+    },
+    "guarda_portao": {
+        "speaker": "Guarda",
+        "start": "inicio",
+        "nodes": (
+            {
+                "id": "inicio",
+                "text": "O portão fecha ao anoitecer. Não me faça procurar você.",
+                "choices": (
+                    {"text": "Estarei dentro.", "goto": "dentro"},
+                    {
+                        "text": "O vilarejo me conhece.",
+                        "goto": "conhecido",
+                        "conditions": (
+                            {"type": "reputacao", "key": "vilarejo",
+                             "compare": ">=", "value": 5},
+                        ),
+                    },
+                    {"text": "Nada a declarar.", "goto": ""},
+                ),
+            },
+            {
+                "id": "dentro",
+                "text": "Bom. A muralha não é enfeite.",
+                "choices": ({"text": "Entendido.", "goto": ""},),
+            },
+            {
+                "id": "conhecido",
+                "text": "Conhece. E é por isso que estou avisando em vez de mandando.",
+                "choices": ({"text": "Agradeço.", "goto": ""},),
+            },
+        ),
+    },
+}
+
+# Qual árvore cada arquétipo usa. Nome de arquivo, não caminho: o runner monta o caminho.
+DIALOGUE_BY_ARCHETYPE: dict[str, str] = {
+    "comerciante": "aldeao_saudacao",
+    "artesao": "ferreiro_encomenda",
+    "crianca": "aldeao_saudacao",
+}
+
+# --- Prova do diálogo --------------------------------------------------------
+
+DIALOGUE_PROOF_SECONDS = 6.0    # s de rotina observados antes e depois da conversa
+DIALOGUE_PROOF_TOLERANCE = 0.35 # m de tolerância na retomada da rotina
 
 # ---------------------------------------------------------------------------
 # Geração

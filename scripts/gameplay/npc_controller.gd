@@ -89,6 +89,9 @@ var _stuck_events: int = 0
 ## `NPCDirector`, interpolando a rota que ele já tinha.
 var _active: bool = true
 var _shadows_on: bool = true
+## Rotina congelada durante uma conversa. Guarda estado, destino e posto — os três — para a
+## retomada ser a mesma rotina e não uma rotina nova.
+var _paused: Dictionary = {}
 var _mesh_cache: Array[MeshInstance3D] = []
 var _abstract_path: PackedVector3Array = PackedVector3Array()
 var _abstract_index: int = 0
@@ -297,7 +300,7 @@ func _reachable(point: Vector3) -> Vector3:
 
 
 func _physics_process(delta: float) -> void:
-	if not _active:
+	if not _active or not _paused.is_empty():
 		return
 
 	_speak_cooldown = maxf(_speak_cooldown - delta, 0.0)
@@ -512,6 +515,57 @@ func _hush() -> void:
 func _eye_height() -> float:
 	var height: float = _locomotion.character_height()
 	return height if height > 0.0 else Params.NAV_AGENT_HEIGHT
+
+
+# --- Conversa -----------------------------------------------------------------
+
+
+## Congela a rotina. O habitante para de andar e passa a olhar para quem chegou.
+##
+## Guardar o estado inteiro — e não só "estava andando" — é o que faz a retomada devolver a
+## mesma rotina. Recalcular a agenda na saída faria um habitante que estava a meio caminho
+## da taverna recomeçar da casa dele, e o jogador veria a conversa ter apagado o que ele
+## estava fazendo.
+func pause_routine() -> void:
+	if not _paused.is_empty():
+		return
+	_paused = {
+		"state": _state,
+		"task": _task_state,
+		"goal": _goal,
+		"post": _post_position,
+		"idle": _idle_timer,
+	}
+	velocity = Vector3.ZERO
+	_locomotion.clear_drive_velocity()
+
+
+## Devolve a rotina exatamente onde ela estava.
+func resume_routine() -> void:
+	if _paused.is_empty():
+		return
+	_state = _paused["state"]
+	_task_state = _paused["task"]
+	_goal = _paused["goal"]
+	_post_position = _paused["post"]
+	_idle_timer = _paused["idle"]
+	_paused = {}
+	# O caminho é o único que se refaz, e não por escolha: o agente descartou o dele
+	# enquanto ninguém andava. O destino é o mesmo, então o caminho recomeça para o mesmo
+	# lugar — o que se perde é o trecho já andado, que o habitante já andou.
+	_repath_timer = 0.0
+	_progress_anchor = global_position
+	_progress_timer = 0.0
+
+
+## A rotina está congelada por uma conversa?
+func is_paused() -> bool:
+	return not _paused.is_empty()
+
+
+## Para onde este habitante está indo. A prova compara antes e depois da conversa.
+func goal() -> Vector3:
+	return _goal
 
 
 # --- Simulação barata ---------------------------------------------------------

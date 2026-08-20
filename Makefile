@@ -15,12 +15,17 @@ GODOT ?= godot
 BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest valley city population bench clean regen help
+.PHONY: all params project materials dialogues gaits player assets test-assets characters audio world verify warnings preview anim playtest valley city population dialogue bench clean regen help
 
 ## Agendas diárias dos arquétipos em resources/schedules/.
 schedules:
 	@echo "== schedules =="
 	@$(PY) -m tools.gen_schedules
+
+## Árvores de conversa em resources/dialogues/.
+dialogues:
+	@echo "== dialogues =="
+	@$(PY) -m tools.gen_dialogues
 
 ## Cena do habitante em scenes/npc/.
 npc:
@@ -28,7 +33,7 @@ npc:
 	@$(PY) -m tools.gen_npc
 
 ## Regenera tudo e verifica. É o alvo que precisa passar antes de qualquer commit.
-all: params project materials gaits schedules player npc assets characters audio world verify
+all: params project materials gaits schedules dialogues player npc assets characters audio world verify
 	@echo "== pronto: projeto regenerado e verificado =="
 
 ## scripts/core/params.gd a partir de tools/params.py.
@@ -130,6 +135,11 @@ population:
 	@echo "== population =="
 	@GODOT=$(GODOT) $(PY) -m tools.population
 
+## Abre uma conversa com um habitante em rotina e prova que a rotina volta como estava.
+dialogue:
+	@echo "== dialogue =="
+	@GODOT=$(GODOT) $(PY) -m tools.dialogue
+
 ## Percorre a rota fixa, mede, e acrescenta uma linha a docs/bench_history.csv.
 ## Precisa do Godot com display.
 bench:
@@ -167,6 +177,7 @@ help:
 	@echo "  make anim     tiras de quadros da locomoção (precisa do Godot)"
 	@echo "  make playtest dirige o jogador e mede o controle (precisa do Godot)"
 	@echo "  make population roda 3 min de praça e prova que a cidade tem vida (precisa do Godot)"
+	@echo "  make dialogue prova que a conversa não quebra a rotina (precisa do Godot)"
 	@echo "  make city     gera 3 cidades, valida e captura 6 pontos (precisa do Godot)"
 	@echo "  make valley   compara dois vales por seed (precisa do Godot)"
 	@echo "  make bench    mede a rota fixa e acumula docs/bench_history.csv"

@@ -30,6 +30,7 @@ CONTROLLER_SCRIPT = "res://scripts/gameplay/player_controller.gd"
 RACE_SCRIPT = "res://scripts/gameplay/race_applier.gd"
 LOCOMOTION_SCRIPT = "res://scripts/gameplay/procedural_locomotion.gd"
 CAMERA_SCRIPT = "res://scripts/gameplay/third_person_camera.gd"
+SENSOR_SCRIPT = "res://scripts/gameplay/interaction_sensor.gd"
 
 # Altura de partida da cápsula, só até o RaceApplier medir o corpo de verdade.
 _START_HEIGHT = 1.8
@@ -40,12 +41,13 @@ def _scene() -> str:
     height = P.num(_START_HEIGHT)
     half = P.num(_START_HEIGHT / 2.0)
     return f"""{GENERATED_HEADER('tools/gen_player.py', 'tools/params.py', ';')}
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="{CONTROLLER_SCRIPT}" id="1_player"]
 [ext_resource type="Script" path="{RACE_SCRIPT}" id="2_race"]
 [ext_resource type="Script" path="{LOCOMOTION_SCRIPT}" id="3_legs"]
 [ext_resource type="Script" path="{CAMERA_SCRIPT}" id="4_camera"]
+[ext_resource type="Script" path="{SENSOR_SCRIPT}" id="5_sensor"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = {radius}
@@ -58,6 +60,7 @@ script = ExtResource("1_player")
 locomotion_path = NodePath("Locomotion")
 camera_path = NodePath("CameraArm")
 race_path = NodePath("Race")
+sensor_path = NodePath("Sensor")
 
 [node name="Collider" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, {half}, 0)
@@ -71,6 +74,10 @@ collider_path = NodePath("../Collider")
 
 [node name="Locomotion" type="Node3D" parent="."]
 script = ExtResource("3_legs")
+
+[node name="Sensor" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, {half}, 0)
+script = ExtResource("5_sensor")
 
 [node name="CameraArm" type="SpringArm3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, {half}, 0)

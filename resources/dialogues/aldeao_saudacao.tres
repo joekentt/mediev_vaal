@@ -1,0 +1,19 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_dialogues.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_resource type="Resource" script_class="DialogueTree" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/dialogue_tree.gd" id="1_dialogue_tree"]
+
+[resource]
+script = ExtResource("1_dialogue_tree")
+id = &"aldeao_saudacao"
+speaker = "Aldeão"
+start = &"inicio"
+nodes = Array[Dictionary]([
+	{"id": &"inicio", "text": "Bom dia. O vale anda quieto desde a última feira.", "choices": [{"text": "Quieto como?", "goto": &"quieto"}, {"text": "Onde fica a ferraria?", "goto": &"ferraria"}, {"text": "Bom dia.", "goto": &""}]},
+	{"id": &"quieto", "text": "Menos carroça na estrada. Ninguém sabe dizer por quê.", "effects": [{"type": &"flag", "key": &"ouviu_do_silencio", "value": true}], "choices": [{"text": "Entendo.", "goto": &""}]},
+	{"id": &"ferraria", "text": "Segue a rua principal até a praça; o martelo faz o resto.", "choices": [{"text": "Obrigado.", "goto": &""}]},
+])

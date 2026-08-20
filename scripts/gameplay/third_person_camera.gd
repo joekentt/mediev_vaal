@@ -62,6 +62,11 @@ var _has_anchor: bool = false
 @export var shake_max_fall: float = Params.CAMERA_SHAKE_MAX_FALL
 
 
+## Enquadramento de conversa: para onde olhar, e se está ativo.
+var _conversation_focus: Vector3 = Vector3.ZERO
+var _in_conversation: bool = false
+
+
 func _ready() -> void:
 	# Sem isto o braço herda a rotação do corpo, e o personagem girar arrastaria a câmera
 	# junto: mira e movimento deixariam de ser independentes.
@@ -131,6 +136,25 @@ func zoom(steps: float) -> void:
 ## `_physics_process` varreria sempre com a rotação do frame anterior. Numa girada rápida
 ## de mouse isso põe a lente dentro da parede por um quadro. Chamado pelo corpo, que é o
 ## nó **pai**, a transformação já está nova quando a varredura roda.
+## Enquadra uma conversa: a câmera desliza para trás do ombro do jogador, olhando para a
+## cabeça do interlocutor.
+##
+## Desliza, não corta. Corte seco em jogo de terceira pessoa custa a orientação espacial
+## que o jogador levou a caminhada inteira para construir — ele perde onde está e, ao sair
+## da conversa, anda para o lado errado.
+func frame_conversation(focus: Vector3) -> void:
+	_conversation_focus = focus
+	_in_conversation = true
+
+
+func release_conversation() -> void:
+	_in_conversation = false
+
+
+func is_framing_conversation() -> bool:
+	return _in_conversation
+
+
 func follow(delta: float) -> void:
 	if _target == null:
 		return
@@ -139,12 +163,60 @@ func follow(delta: float) -> void:
 	if _locomotion != null:
 		anchor += _locomotion.camera_offset
 
+	if _in_conversation:
+		_follow_conversation(anchor, delta)
+		return
+
 	global_position = global_position.lerp(anchor, _smoothing(follow_lag, delta))
 	rotation = Vector3(_pitch, _yaw, 0.0)
 
 	_distance = lerpf(_distance, distance, _smoothing(follow_lag, delta))
 	spring_length = _distance + _shake_offset(delta)
 	_update_fov(delta)
+
+
+## Enquadramento de ombro: o braço encolhe, escorrega para o lado e aponta para a cabeça
+## do interlocutor.
+##
+## O lado escolhido é o **oposto** ao interlocutor. Pôr a câmera do mesmo lado deixaria o
+## corpo do jogador entre a lente e o rosto de quem fala, que é exatamente o que um
+## enquadramento de conversa existe para evitar.
+func _follow_conversation(anchor: Vector3, delta: float) -> void:
+	var towards: Vector2 = Vector2(
+		_conversation_focus.x - anchor.x, _conversation_focus.z - anchor.z
+	)
+	if towards.length() < CONVERSATION_MIN_GAP:
+		return
+	var facing: float = atan2(towards.x, towards.y)
+	var blend: float = _smoothing(Params.DIALOGUE_CAMERA_BLEND, delta)
+
+	var side: Vector3 = Basis(Vector3.UP, facing) * Vector3.RIGHT
+	var spot: Vector3 = (
+		anchor
+		+ side * Params.DIALOGUE_CAMERA_SIDE
+		+ Vector3.UP * Params.DIALOGUE_CAMERA_RISE
+	)
+	global_position = global_position.lerp(spot, blend)
+
+	# O braço encolhe para a distância de conversa e a mola continua colidindo: o
+	# enquadramento não é desculpa para a lente atravessar a parede atrás do jogador.
+	spring_length = lerpf(spring_length, Params.DIALOGUE_CAMERA_BACK, blend)
+
+	var wanted_yaw: float = facing
+	var height: float = _conversation_focus.y - global_position.y
+	var reach: float = maxf(towards.length(), CONVERSATION_MIN_GAP)
+	var wanted_pitch: float = atan2(height, reach)
+	_yaw = lerp_angle(_yaw, wanted_yaw, blend)
+	_pitch = lerp_angle(_pitch, wanted_pitch, blend)
+	rotation = Vector3(_pitch, _yaw, 0.0)
+
+	if _camera != null:
+		_camera.fov = lerpf(_camera.fov, Params.DIALOGUE_CAMERA_FOV, blend)
+
+
+## Piso da distância ao interlocutor. Abaixo disto a direção é ruído e o enquadramento
+## giraria sozinho.
+const CONVERSATION_MIN_GAP: float = 0.2
 
 
 ## Distância livre entre o alvo e a lente, em metros. Negativa significa que a lente
