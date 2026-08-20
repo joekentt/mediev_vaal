@@ -436,10 +436,14 @@ static func _furnish(
 	type_name: StringName,
 	rng: RandomNumberGenerator
 ) -> void:
-	var kit: Array[StringName] = (
-		[&"bench", &"crate", &"pot", &"barrel"] if type_name == &"taverna"
-		else [&"anvil", &"barrel", &"sack", &"crate"]
-	)
+	# Ternário devolve `Array` sem tipo, e atribuí-lo a `Array[StringName]` falha em
+	# runtime com "Trying to assign an array of type Array". O `if` explícito preserva o
+	# tipo dos dois lados.
+	var kit: Array[StringName] = []
+	if type_name == &"taverna":
+		kit = [&"bench", &"crate", &"pot", &"barrel"]
+	else:
+		kit = [&"anvil", &"barrel", &"sack", &"crate"]
 	var inset: float = Params.CITY_LOT_SETBACK + Params.CITY_BUILDING_MODULE * HALF
 	for index: int in Params.CITY_INTERIOR_PROPS:
 		var part: StringName = kit[index % kit.size()]

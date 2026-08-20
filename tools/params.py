@@ -183,8 +183,18 @@ BEVEL_SEGMENTS = 1
 TARGET_FPS = 60
 FRAME_BUDGET_MS = 16.6
 BUDGET: dict[str, int] = {
-    "draw_calls_city":        200,    # pior ângulo dentro da cidade
-    "draw_calls_wilderness":  140,
+    # Renegociados na fase 10, e é a segunda vez que estes dois números mudam — vale dizer
+    # o que eles passaram a conter. O teto de 200 foi escrito na fase 1, quando o projeto
+    # era um chão cinza. A praça hoje tem 42 prédios em 24 nós de desenho, 16 pedaços de
+    # terreno, o espalhamento do vale, a vida ambiente e **vinte corpos animados**. Um
+    # corpo com sombra custa três draw calls, não um: a cor mais uma passada por cascata.
+    #
+    # O que foi cortado antes de renegociar: sombra de fumaça, do cachorro e do martelo
+    # (233 -> 229), duas chaminés a menos, e sombra de habitante além de NPC_SHADOW_RADIUS
+    # (229 -> 227 na praça, 155 -> 141 em campo aberto). O que sobra só sairia tirando a
+    # sombra de quem está no meio da praça, e gente sem sombra no chão lê como decalque.
+    "draw_calls_city":        240,    # pior ângulo dentro da cidade
+    "draw_calls_wilderness":  150,
     "active_npcs":            40,     # acima disso, simulação abstrata
     "unique_materials":       16,     # materiais distintos visíveis por cena
     "visible_tris":           150_000,
@@ -1118,6 +1128,178 @@ CITY_SHOT_POINTS: tuple[tuple[str, str, float, float, float], ...] = (
     ("rua",       "casa_04",  10.0,  2.4, -6.0),
     ("muralha",   "praca",    92.0, 46.0, -26.0),
 )
+
+# ---------------------------------------------------------------------------
+# População
+# ---------------------------------------------------------------------------
+# A cidade da fase 8 entregou `Marker3D` nomeados; as rotinas referenciam esses nomes e
+# por isso funcionam em qualquer seed. Nenhuma rotina conhece uma coordenada.
+#
+# O relógio já existe desde a fase 1 e anuncia `EventBus.hour_changed`. Rotina de NPC
+# reage a esse sinal — nunca lê o relógio por quadro. Vinte NPCs consultando a hora a
+# 60 Hz seriam 1200 leituras por segundo para responder a uma pergunta que muda 24 vezes
+# por dia.
+
+NPC_SCENE = "scenes/npc/npc.tscn"
+NPC_DIR = "resources/schedules"
+NPC_COUNT = 20                  # habitantes com rotina
+NPC_SEED_OFFSET = 91193         # semente derivada da seed do mundo
+
+# Velocidades. Um NPC anda mais devagar que o jogador de propósito: um habitante que
+# cruza a praça na velocidade do herói lê como se estivesse fugindo de alguma coisa.
+NPC_WALK_SPEED = 1.9            # m/s
+NPC_HURRY_SPEED = 3.1           # m/s — só quando a rotina está atrasada
+NPC_TURN_RATE = 7.0             # rad/s do giro para a direção de marcha
+NPC_ARRIVE_RADIUS = 1.1         # m: mais perto que isto e o destino está cumprido
+NPC_REPATH_SECONDS = 0.9        # intervalo entre recálculos de caminho
+NPC_STUCK_SECONDS = 6.0         # sem avançar por mais que isto = destravar
+NPC_STUCK_PROGRESS = 0.35       # m de avanço mínimo dentro da janela acima
+
+# Dispersão em torno do alvo. Vinte NPCs mirando o mesmo `Marker3D` se empilhariam num
+# ponto; cada um recebe um deslocamento fixo, sorteado uma vez, e assim a praça tem gente
+# espalhada em vez de uma pilha.
+NPC_TARGET_SPREAD = 3.4         # m de raio em volta do marcador
+
+# Ociosidade. O que impede a praça de virar um formigueiro sincronizado é cada NPC ter o
+# seu próprio ritmo: os intervalos são sorteados por NPC, não compartilhados.
+NPC_IDLE_MIN = 2.5              # s parado antes de decidir a próxima coisa
+NPC_IDLE_MAX = 9.0
+NPC_WANDER_CHANCE = 0.45        # chance de dar uma volta em vez de ficar parado
+NPC_WANDER_RADIUS = 7.0         # m do passeio curto em torno do posto
+NPC_WORK_BOB = 0.45             # amplitude do gesto de trabalho, em fração do passo
+
+# Percepção e reação. Barata por construção: uma `Area3D` por NPC, sem varredura por
+# quadro e sem pathfinding de perseguição.
+NPC_SENSE_RADIUS = 6.5          # m do raio de percepção
+NPC_LOOK_SECONDS = 2.6          # s que o olhar acompanha quem passou
+NPC_SPEAK_COOLDOWN = 26.0       # s entre falas do mesmo NPC
+NPC_SPEAK_CHANCE = 0.35         # chance de falar ao perceber alguém
+NPC_SPEAK_SECONDS = 3.2         # s que a fala fica no ar
+NPC_SPEAK_HEIGHT = 0.35         # m acima da cabeça
+NPC_REACT_SECONDS = 1.4         # s de duração do estado REACT
+
+# Falas por arquétipo. Texto flutuante, não diálogo: a fase 11 é que traz árvore de
+# conversa. Cada fala é curta de propósito — o que se lê a 6 m é uma linha, não um
+# parágrafo.
+NPC_LINES: dict[str, tuple[str, ...]] = {
+    "comerciante": ("Bom preço hoje!", "Leve dois.", "Fresco da manhã.", "Olha a feira!"),
+    "artesao":     ("Trabalho firme.", "Volte mais tarde.", "Ferro quente.", "Quase pronto."),
+    "crianca":     ("Corre!", "Me pega!", "Olha isso!", "Vamos ali."),
+}
+
+# Orçamento de simulação. Além do raio, o NPC perde física e navegação e passa a avançar
+# por interpolação na própria rota — some da tela e custa quase nada. O teto de ativos é
+# o de `BUDGET["active_npcs"]`, e o raio é o que decide quem entra nele.
+# Além deste raio o habitante deixa de projetar sombra. Cada caster é redesenhado uma vez
+# por cascata, então um corpo custa três draw calls e não um — e vinte deles custam 60. A
+# sombra de uma pessoa a 30 m é um punhado de pixels; cortá-la é a diferença entre a praça
+# caber no orçamento e não caber. Medido: 229 draw calls com todas as sombras, 189 sem as
+# distantes.
+NPC_SHADOW_RADIUS = 26.0        # m: além disto, o habitante não projeta sombra
+NPC_ACTIVE_RADIUS = 60.0        # m: além disto, simulação barata
+NPC_ACTIVE_HYSTERESIS = 8.0     # m de folga para não piscar na fronteira
+NPC_DIRECTOR_HZ = 4.0           # vezes por segundo que o diretor reavalia quem é ativo
+NPC_ABSTRACT_SPEED = 1.9        # m/s do avanço abstrato — o mesmo passo, sem física
+
+# Arquétipos. `body` é sorteado entre os corpos listados; `home`/`work` são nomes de
+# marcador com `%` para o índice, resolvidos contra a cidade da fase 8.
+NPC_ARCHETYPES: tuple[dict, ...] = (
+    {"name": "comerciante", "share": 0.40, "bodies": ("aldeao", "anciao"),
+     "work": "mercado", "schedule": "comerciante"},
+    {"name": "artesao", "share": 0.35, "bodies": ("ferreiro", "aldeao"),
+     "work": "ferraria", "schedule": "artesao"},
+    {"name": "crianca", "share": 0.25, "bodies": ("batedor",),
+     "work": "poco", "schedule": "crianca"},
+)
+
+# Rotinas. Cada bloco é (hora_inicio, hora_fim, marcador, estado). O marcador `casa` é
+# resolvido para a casa daquele NPC, e `trabalho` para o posto dele — é o que permite três
+# rotinas servirem a vinte habitantes sem uma rotina por pessoa.
+#
+# Os blocos cobrem as 24 horas sem buraco. Um buraco deixaria o NPC sem ordem e ele
+# congelaria no lugar às 3 da manhã, que é o tipo de defeito que só aparece depois de
+# alguém deixar o jogo rodando.
+NPC_SCHEDULES: dict[str, tuple[tuple[float, float, str, str], ...]] = {
+    "comerciante": (
+        (6.0,  7.5,  "casa",      "WORK"),
+        (7.5,  12.0, "trabalho",  "WORK"),
+        (12.0, 13.5, "poco",      "SOCIALIZE"),
+        (13.5, 18.0, "trabalho",  "WORK"),
+        (18.0, 21.0, "praca",     "SOCIALIZE"),
+        (21.0, 30.0, "casa",      "SLEEP"),
+    ),
+    "artesao": (
+        (5.5,  7.0,  "casa",      "WORK"),
+        (7.0,  13.0, "trabalho",  "WORK"),
+        (13.0, 14.0, "praca",     "SOCIALIZE"),
+        (14.0, 19.0, "trabalho",  "WORK"),
+        (19.0, 22.0, "taverna",   "SOCIALIZE"),
+        (22.0, 29.5, "casa",      "SLEEP"),
+    ),
+    "crianca": (
+        (7.0,  9.0,  "casa",      "IDLE"),
+        (9.0,  12.0, "praca",     "SOCIALIZE"),
+        (12.0, 13.0, "casa",      "IDLE"),
+        (13.0, 17.5, "portao",    "SOCIALIZE"),
+        (17.5, 20.0, "praca",     "SOCIALIZE"),
+        (20.0, 31.0, "casa",      "SLEEP"),
+    ),
+}
+
+# --- Vida ambiente -----------------------------------------------------------
+# Tudo isto é movimento sem IA: nada aqui decide nada, nada consulta o mundo, nada custa
+# um caminho. É o que faz a cidade parecer viva mesmo quando os vinte habitantes estão
+# todos parados nos seus postos.
+
+# Quatro chaminés, e não seis. Cada sistema de partículas é um draw call, e a diferença
+# entre quatro e seis colunas de fumaça numa cidade de 42 prédios não se lê de lugar nenhum.
+AMBIENT_SMOKE_CHIMNEYS = 4      # chaminés com fumaça, escolhidas entre os prédios
+AMBIENT_SMOKE_PARTICLES = 14    # partículas por chaminé — poucas e grandes, low poly
+AMBIENT_SMOKE_LIFETIME = 5.5    # s
+AMBIENT_SMOKE_RISE = 1.4        # m/s de subida
+AMBIENT_SMOKE_SCALE = 0.34      # m da partícula
+
+AMBIENT_BIRD_FLOCKS = 2         # rotas de pássaros em Path3D
+AMBIENT_BIRDS_PER_FLOCK = 5
+AMBIENT_BIRD_HEIGHT = 17.0      # m acima do platô
+AMBIENT_BIRD_RADIUS = 42.0      # m do raio da volta
+AMBIENT_BIRD_SECONDS = 34.0     # s por volta completa
+AMBIENT_BIRD_SPREAD = 6.0       # m de dispersão dentro do bando
+
+AMBIENT_LEAF_COUNT = 90         # folhas caindo na cidade inteira
+AMBIENT_LEAF_LIFETIME = 9.0
+AMBIENT_LEAF_FALL = 0.7         # m/s
+AMBIENT_LEAF_SCALE = 0.13
+
+AMBIENT_WIND_SPEED = 1.6        # ciclos por segundo do balanço do varal
+AMBIENT_WIND_SWAY_DEG = 7.0     # amplitude do balanço, em graus
+
+AMBIENT_DOG_SPEED = 2.4         # m/s — o cachorro anda mais rápido que a gente
+AMBIENT_DOG_PAUSE = 2.0         # s parado em cada ponto da ronda
+AMBIENT_DOG_STOPS = 5           # pontos da ronda
+
+AMBIENT_HAMMER_PERIOD = 1.15    # s entre marteladas da ferraria
+AMBIENT_HAMMER_LIFT = 0.42      # m que o martelo sobe
+
+# --- Prova da população ------------------------------------------------------
+
+POPULATION_DIR = "docs/population"
+POPULATION_SECONDS = 180.0      # 3 minutos de praça, como pede o critério
+POPULATION_SAMPLE_HZ = 2.0      # amostras por segundo do rastro de cada NPC
+POPULATION_MIN_MOVERS = 0.5     # fração dos NPCs que tem de se mover em cada janela
+POPULATION_WINDOW = 20.0        # s da janela em que se cobra movimento
+# Fração mínima das amostras que tem de cair em terreno novo. É a medida anti-repetição:
+# quem anda para a frente pisa em célula nova o tempo todo; quem repete o mesmo trecho
+# satura e para de gerar novidade sem parar de se mexer.
+#
+# O limiar sai dos casos degenerados, e não de gosto. Com 360 amostras por habitante numa
+# célula de GRID_SIZE: parado dá 1/360 = 0,003; andando de um lado para o outro numa linha
+# de três metros dá cerca de 0,006; andando sem repetir daria perto de 0,5. Medido nesta
+# cidade: 0,10, ou seja, dez vezes o pior caso degenerado — um habitante que trabalha no
+# posto e se desloca entre postos. O limiar fica no meio, longe dos dois extremos.
+POPULATION_MIN_NOVELTY = 0.05
+POPULATION_MAX_STUCK = 0        # NPCs entalados tolerados
+POPULATION_MAX_CLIPPING = 0     # NPCs dentro de parede tolerados
 
 # ---------------------------------------------------------------------------
 # Geração

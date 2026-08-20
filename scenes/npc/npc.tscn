@@ -1,0 +1,60 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_npc.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/npc_controller.gd" id="1_npc"]
+[ext_resource type="Script" path="res://scripts/gameplay/race_applier.gd" id="2_race"]
+[ext_resource type="Script" path="res://scripts/gameplay/procedural_locomotion.gd" id="3_legs"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.3
+height = 1.75
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_sense"]
+radius = 6.5
+
+[node name="NPC" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("1_npc")
+
+[node name="Collider" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.875, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Race" type="Node3D" parent="."]
+script = ExtResource("2_race")
+body = &"aldeao"
+locomotion_path = NodePath("../Locomotion")
+collider_path = NodePath("../Collider")
+
+[node name="Locomotion" type="Node3D" parent="."]
+script = ExtResource("3_legs")
+
+[node name="Agent" type="NavigationAgent3D" parent="."]
+radius = 0.5
+height = 1.9
+path_desired_distance = 0.55
+target_desired_distance = 1.1
+avoidance_enabled = true
+
+[node name="Sense" type="Area3D" parent="."]
+monitorable = false
+collision_layer = 16
+collision_mask = 6
+
+[node name="SenseShape" type="CollisionShape3D" parent="Sense"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.875, 0)
+shape = SubResource("SphereShape3D_sense")
+
+[node name="Speech" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+billboard = 1
+no_depth_test = true
+fixed_size = true
+pixel_size = 0.0035
+outline_size = 10
+visible = false

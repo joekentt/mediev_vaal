@@ -148,6 +148,16 @@ window/vsync/vsync_mode={P.VSYNC_MODE}
 
 {_layer_section()}
 
+[navigation]
+
+; O mapa de navegação padrão tem de nascer com a mesma célula com que a região é assada.
+; Sem isto o Godot recusa a região inteira com "attempted to update a navigation region
+; with a navigation mesh that uses a cell_size of 1.0 while assigned to a navigation map
+; set to a cell_size of 0.25" — e o resultado é uma cidade com navegação vazia, em que
+; todo NPC fica parado achando que não há caminho.
+3d/default_cell_size={P.num(P.NAV_CELL_SIZE)}
+3d/default_cell_height={P.num(P.NAV_CELL_HEIGHT)}
+
 [physics]
 
 common/physics_ticks_per_second={P.PHYSICS_TICKS_PER_SECOND}

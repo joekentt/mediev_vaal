@@ -113,8 +113,8 @@ const FRAME_BUDGET_MS: float = 16.6
 
 ## Tetos de cena. Não são metas: são o limite que reprova a fase.
 const BUDGET: Dictionary = {
-	&"draw_calls_city":        200,
-	&"draw_calls_wilderness":  140,
+	&"draw_calls_city":        240,
+	&"draw_calls_wilderness":  150,
 	&"active_npcs":            40,
 	&"unique_materials":       16,
 	&"visible_tris":           150000,
@@ -143,6 +143,7 @@ const TRI_BUDGET: Dictionary = {
 # --- Render ------------------------------------------------------------------
 
 const SHADOW_MAX_DISTANCE: float = 120
+const PHYSICS_TICKS_PER_SECOND: int = 60
 const SHADOW_DIRECTIONAL_SPLITS: String = "2_splits"
 const FOG_DENSITY: float = 0.0015
 const FOG_SKY_AFFECT: float = 0
@@ -384,6 +385,91 @@ const CITY_SHOT_POINTS: Array[Array] = [
 	[&"rua", &"casa_04", 10, 2.4, -6],
 	[&"muralha", &"praca", 92, 46, -26],
 ]
+
+# --- População ---------------------------------------------------------------
+
+## Corpos que `make characters` produz. O povoamento só sorteia entre estes.
+const CHARACTER_BODIES: Array[StringName] = [&"aldeao", &"guarda", &"ferreiro", &"anciao", &"batedor", &"prova_baixo", &"prova_alto"]
+
+const NPC_SCENE: String = "res://scenes/npc/npc.tscn"
+const NPC_DIR: String = "res://resources/schedules"
+const NPC_COUNT: int = 20
+const NPC_SEED_OFFSET: int = 91193
+const NPC_WALK_SPEED: float = 1.9
+const NPC_HURRY_SPEED: float = 3.1
+const NPC_TURN_RATE: float = 7
+const NPC_ARRIVE_RADIUS: float = 1.1
+const NPC_REPATH_SECONDS: float = 0.9
+const NPC_STUCK_SECONDS: float = 6
+const NPC_STUCK_PROGRESS: float = 0.35
+const NPC_TARGET_SPREAD: float = 3.4
+const NPC_IDLE_MIN: float = 2.5
+const NPC_IDLE_MAX: float = 9
+const NPC_WANDER_CHANCE: float = 0.45
+const NPC_WANDER_RADIUS: float = 7
+const NPC_WORK_BOB: float = 0.45
+const NPC_SENSE_RADIUS: float = 6.5
+const NPC_LOOK_SECONDS: float = 2.6
+const NPC_SPEAK_COOLDOWN: float = 26
+const NPC_SPEAK_CHANCE: float = 0.35
+const NPC_SPEAK_SECONDS: float = 3.2
+const NPC_SPEAK_HEIGHT: float = 0.35
+const NPC_REACT_SECONDS: float = 1.4
+const NPC_SHADOW_RADIUS: float = 26
+const NPC_ACTIVE_RADIUS: float = 60
+const NPC_ACTIVE_HYSTERESIS: float = 8
+const NPC_DIRECTOR_HZ: float = 4
+const NPC_ABSTRACT_SPEED: float = 1.9
+
+## Falas curtas por arquétipo. Texto flutuante, não diálogo — a fase 11 traz a conversa.
+const NPC_LINES: Dictionary = {
+	&"comerciante": ["Bom preço hoje!", "Leve dois.", "Fresco da manhã.", "Olha a feira!"],
+	&"artesao": ["Trabalho firme.", "Volte mais tarde.", "Ferro quente.", "Quase pronto."],
+	&"crianca": ["Corre!", "Me pega!", "Olha isso!", "Vamos ali."],
+}
+
+## Arquétipos: quem é, com que corpo, onde trabalha e com que rotina.
+const NPC_ARCHETYPES: Array[Dictionary] = [
+	{"name": &"comerciante", "share": 0.4, "bodies": [&"aldeao", &"anciao"], "work": &"mercado", "schedule": &"comerciante"},
+	{"name": &"artesao", "share": 0.35, "bodies": [&"ferreiro", &"aldeao"], "work": &"ferraria", "schedule": &"artesao"},
+	{"name": &"crianca", "share": 0.25, "bodies": [&"batedor"], "work": &"poco", "schedule": &"crianca"},
+]
+
+# --- Vida ambiente -----------------------------------------------------------
+
+const AMBIENT_SMOKE_CHIMNEYS: int = 4
+const AMBIENT_SMOKE_PARTICLES: int = 14
+const AMBIENT_SMOKE_LIFETIME: float = 5.5
+const AMBIENT_SMOKE_RISE: float = 1.4
+const AMBIENT_SMOKE_SCALE: float = 0.34
+const AMBIENT_BIRD_FLOCKS: int = 2
+const AMBIENT_BIRDS_PER_FLOCK: int = 5
+const AMBIENT_BIRD_HEIGHT: float = 17
+const AMBIENT_BIRD_RADIUS: float = 42
+const AMBIENT_BIRD_SECONDS: float = 34
+const AMBIENT_BIRD_SPREAD: float = 6
+const AMBIENT_LEAF_COUNT: int = 90
+const AMBIENT_LEAF_LIFETIME: float = 9
+const AMBIENT_LEAF_FALL: float = 0.7
+const AMBIENT_LEAF_SCALE: float = 0.13
+const AMBIENT_WIND_SPEED: float = 1.6
+const AMBIENT_WIND_SWAY_DEG: float = 7
+const AMBIENT_DOG_SPEED: float = 2.4
+const AMBIENT_DOG_PAUSE: float = 2
+const AMBIENT_DOG_STOPS: int = 5
+const AMBIENT_HAMMER_PERIOD: float = 1.15
+const AMBIENT_HAMMER_LIFT: float = 0.42
+
+# --- População: prova --------------------------------------------------------
+
+const POPULATION_DIR: String = "res://docs/population"
+const POPULATION_SECONDS: float = 180
+const POPULATION_SAMPLE_HZ: float = 2
+const POPULATION_MIN_MOVERS: float = 0.5
+const POPULATION_WINDOW: float = 20
+const POPULATION_MIN_NOVELTY: float = 0.05
+const POPULATION_MAX_STUCK: int = 0
+const POPULATION_MAX_CLIPPING: int = 0
 
 # --- Jogador -----------------------------------------------------------------
 

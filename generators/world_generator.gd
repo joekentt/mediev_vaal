@@ -95,6 +95,13 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	stage.add_child(region)
 	region.bake_navigation_mesh(true)
 
+	# Vida por último, e nesta ordem: o ambiente não depende de ninguém, mas a população
+	# depende do assado de navegação e o martelo depende do artesão existir.
+	var ambient: Dictionary = AmbientGenerator.build(layout, field, stage, world_seed)
+	var population: Dictionary = PopulationGenerator.populate(
+		layout, stage, world_seed, null, ambient["node"]
+	)
+
 	last_report = {
 		"seed": world_seed,
 		"chunks": chunks,
@@ -107,6 +114,12 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 		"city_instances": int(city["instances"]),
 		"city_draw_nodes": int(city["draw_nodes"]),
 		"city_occluders": int(city["occluders"]),
+		"npcs": int(population["npcs"]),
+		"npc_archetypes": population["archetypes"],
+		"npc_active_ceiling": int(population["active_ceiling"]),
+		"ambient_smoke": int(ambient["smoke"]),
+		"ambient_birds": int(ambient["birds"]),
+		"ambient_leaves": int(ambient["leaves"]),
 		"build_ms": float(Time.get_ticks_msec() - started),
 	}
 	last_report.merge(layout.report)

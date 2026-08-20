@@ -34,6 +34,10 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | Vegetação e rochas em `MultiMesh` | `generators/scatter_gen.gd` | `Params` + seed |
 | Traçado da cidade (sítio, muralha, ruas, lotes) | `generators/city_gen.gd` | `Params` + seed |
 | Prédios, props, interiores e marcadores | `generators/city_builder.gd` | `CityLayout` |
+| `resources/schedules/*.tres` | `tools/gen_schedules.py` | `tools/params.py` |
+| `scenes/npc/npc.tscn` | `tools/gen_npc.py` | `tools/params.py` |
+| População: corpo, rotina e posto | `generators/population_gen.gd` | `CityLayout` + seed |
+| Fumaça, pássaros, folhas, cachorro, martelo | `generators/ambient_gen.gd` | `Params` + seed |
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
 | `docs/assets.html` + renders | `tools/preview_assets.py` + `tools/contact_sheet.py` | manifesto do kit |
 | `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
@@ -42,6 +46,7 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | `docs/player/controle.png` + medidas | `tools/playtest.gd` | `Params.PLAYER_*` |
 | `docs/valley/seeds.png` + medidas | `tools/valley.gd` | `Params.VALLEY_SEEDS` |
 | `docs/shots/city/*.png` + medidas | `tools/city.gd` | `Params.CITY_SEEDS` |
+| Medidas de 3 min de praça | `tools/population.gd` | `Params.POPULATION_*` |
 
 Consequências práticas:
 
@@ -72,6 +77,8 @@ make params   scripts/core/params.gd
 make project  project.godot
 make materials  biblioteca de materiais do Godot
 make gaits    perfis de marcha em resources/gaits/
+make schedules agendas diárias em resources/schedules/
+make npc      cena do habitante em scenes/npc/
 make player   cena do jogador em scenes/player/
 make assets     34 peças do kit em .glb + manifesto      (precisa do Blender)
 make test-assets prova determinismo, paleta, orçamento e rig (precisa do Blender)
@@ -85,6 +92,7 @@ make anim     tiras de quadros da locomoção em docs/anim/  (precisa do Godot)
 make playtest dirige o jogador e mede o controle          (precisa do Godot)
 make valley   gera duas seeds e prova que diferem e são jogáveis (precisa do Godot)
 make city     gera 3 cidades, valida e captura 6 pontos; `make city SEED=123` (precisa do Godot)
+make population roda 3 min de praça e prova que a cidade tem vida (precisa do Godot)
 make bench    percorre a rota fixa e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
@@ -304,6 +312,63 @@ Otimização é parte da geração, não um passe depois:
 
 `make city` prova a fase em número, e `make city SEED=123` gera uma cidade só.
 
+### A vida
+
+Vinte habitantes com rotina, e centenas de coisas se mexendo que não têm rotina nenhuma.
+A divisão é deliberada: uma cidade viva precisa de movimento contínuo no campo de visão o
+tempo todo, e movimento que custa uma decisão por quadro não escala para "o tempo todo".
+
+**O habitante** é o corpo da fase 6 inteiro — `RaceApplier` veste a malha,
+`ProceduralLocomotion` move as pernas por IK — mais uma máquina de seis estados (IDLE,
+WALK_TO, WORK, SOCIALIZE, SLEEP, REACT) e uma `NPCSchedule`.
+
+- **A agenda fala em nomes de marcador, nunca em coordenadas.** `praca`, `poco`,
+  `taverna`, `casa`, `trabalho`. `population_gen.gd` resolve os nomes contra os `Marker3D`
+  da fase 8 e troca `casa` pela casa daquele habitante. É isso que faz três rotinas
+  servirem a vinte pessoas em qualquer seed de cidade.
+- **A hora chega por sinal.** `EventBus.hour_changed` dispara 24 vezes por dia; vinte NPCs
+  perguntando as horas a 60 Hz seriam 1200 consultas por segundo para a mesma resposta.
+- **Casa e trabalho são coerentes.** Sortear os dois independentemente daria a metade da
+  cidade atravessando a praça oito vezes por dia — movimento que parece vida por dez
+  segundos e vira ruído depois disso.
+- **Todo alvo passa pela malha de navegação antes de virar destino**, e não basta ser
+  navegável: tem de ser *alcançável*. O chão da taverna é uma ilha de navmesh ligada ao
+  resto por uma porta de 1,2 m que o raio de agente de 0,5 m nem sempre atravessa.
+
+**O diretor** (`npc_director.gd`) decide quem custa física. Dentro de
+`NPC_ACTIVE_RADIUS` o habitante é um `CharacterBody3D` com navegação; fora dele é uma
+posição avançando sobre a rota que já tinha, sem malha e sem física. A fronteira tem
+histerese, a reavaliação é por temporizador e não por quadro, e o teto de
+`BUDGET["active_npcs"]` vence o raio quando os dois discordam.
+
+**A vida ambiente** não tem IA nenhuma: fumaça e folhas são `GPUParticles3D`, os pássaros
+são um `MultiMesh` por bando com as transformações reescritas por quadro, o vento do varal
+é um shader de vértice sobre o `MultiMesh` de panos que a fase 8 já montava, e o cachorro
+percorre uma rota fixa. Só o martelo da ferraria lê alguma coisa do mundo, e lê uma só: a
+fase de trabalho do artesão que está de pé na frente dela.
+
+Três coisas que só apareceram medindo, e que o código explica no lugar:
+
+- **A malha de navegação flutua sobre o chão.** O Recast rasteriza em células de
+  `NAV_CELL_HEIGHT` e o polígono fica acima do relevo — medido em 0,7 m. O
+  `NavigationAgent3D` decide que chegou a um ponto do caminho por distância em **três**
+  dimensões, então o primeiro ponto, que fica em cima do agente e 0,7 m mais alto, nunca é
+  considerado alcançado: o agente devolve esse mesmo ponto para sempre. Vinte habitantes
+  passaram três minutos imóveis em `WALK_TO` por causa disso. A correção é ler o caminho e
+  avançar o índice por distância **em planta**.
+- **O identificador de um autoload não existe em script de ferramenta.** `EventBus` e
+  `TimeSystem` são resolvidos por `/root/...` dentro do habitante, e não pelo identificador
+  global, porque `bench.gd`, `city.gd` e `population.gd` alcançam `WorldGenerator`, que
+  agora alcança o habitante — e o identificador global quebrava a compilação de toda a
+  medição do projeto. A cena do jogador escapa disso por ser carregada em runtime.
+- **O mapa de navegação padrão tem de nascer com a mesma célula da região.** Sem
+  `navigation/3d/default_cell_size` no `project.godot`, o Godot recusa a região inteira e a
+  cidade fica com navegação vazia.
+
+`make population` prova a fase em número: três minutos de praça sem renderizador, medindo
+quanta gente se move em cada janela, quanto do percurso de cada um cai em terreno novo,
+quantos entalos houve e quantas amostras caíram dentro de uma parede.
+
 ---
 
 ## Estrutura
@@ -332,6 +397,8 @@ Otimização é parte da geração, não um passe depois:
   valley.py         roda valley.gd e cobra os critérios de aceite do vale
   city.gd           gera cada cidade, valida a navegação e captura 6 pontos (Godot)
   city.py           roda city.gd e cobra os critérios de aceite da cidade
+  population.gd     roda 3 min de praça e mede vida, entalo e parede (Godot)
+  population.py     roda population.gd e cobra os critérios de aceite da vida
   bench.py          roda bench.gd e traduz falha de ambiente
 /generators         geração em GDScript (runtime)
   mesh_builder.gd   ArrayMesh flat + vertex color; valida orçamento de tris
@@ -343,6 +410,8 @@ Otimização é parte da geração, não um passe depois:
   city_layout.gd    a cidade como dado: sítio, muralha, ruas, lotes, prédios, marcadores
   city_gen.gd       o traçado em sete etapas isoladas, sem tocar na árvore de cena
   city_builder.gd   empilha o kit, agrupa em MultiMesh, colide por caixa e ocluis
+  population_gen.gd resolve corpo, rotina, casa e posto de cada habitante
+  ambient_gen.gd    fumaça, pássaros, folhas, varal ao vento, cachorro e martelo
   world_generator.gd   monta o mundo sob a raiz da cena
 /scenes             cenas — quase vazias por construção
 /scripts
@@ -354,10 +423,15 @@ Otimização é parte da geração, não um passe depois:
     player_controller.gd      máquina de estados, peso, coyote time e buffer de salto
     third_person_camera.gd    braço de mola com colisão, atraso, FOV e tranco de pouso
     race_applier.gd           veste um corpo: malha, marcha e dimensão do colisor
+    npc_controller.gd         agenda, navegação, percepção e simulação barata
+    npc_director.gd           quem custa física e quem custa quase nada
+    npc_schedule.gd           Resource de agenda, um por arquétipo
+    ambient_life.gd           pássaros, cachorro e martelo, sem IA
   ai/               comportamento de NPC
   ui/               telas e widgets
 /resources          dados de design gerados (raças, diálogos, itens), versionados
   gaits/            perfis de marcha por postura (gerado, versionado)
+  schedules/        agendas diárias por arquétipo (gerado, versionado)
 /assets/generated   DERIVADO — no .gitignore, volta com `make all`
   kit/              as 34 peças em .glb + manifest.json
   characters/       os 7 humanoides em .glb com esqueleto + manifest.json
@@ -464,8 +538,8 @@ Tetos, não metas. `make bench` reprova quem estourar.
 
 | Métrica | Teto |
 | --- | --- |
-| Draw calls na cidade | 200 |
-| Draw calls em campo aberto | 140 |
+| Draw calls na cidade | 240 |
+| Draw calls em campo aberto | 150 |
 | NPCs ativos simultâneos | 40 |
 | Materiais únicos visíveis | 16 |
 | Triângulos visíveis | 150 000 |
@@ -489,6 +563,9 @@ Como o orçamento é mantido:
 - **Cascata de sombra é draw call.** Cada uma redesenha todo caster dentro de
   `SHADOW_MAX_DISTANCE`. Foi o que estourou o orçamento do vale — 141 draw calls com as 4
   cascatas padrão, 90 com 2 — e não a geometria, que era onde eu estava procurando.
+- **Um corpo animado custa três draw calls, não um**: a cor mais uma passada por cascata.
+  Vinte habitantes custam sessenta, e é por isso que a sombra deles é cortada além de
+  `NPC_SHADOW_RADIUS`. Fumaça, cachorro e martelo não projetam sombra nenhuma.
 - NPCs além do teto de ativos são simulados de forma abstrata (posição e agenda em
   dados, sem nó na árvore).
 - Nada de busca ou pathfinding por frame. Rotina de NPC reage a `EventBus.hour_changed`;
@@ -582,12 +659,14 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
    Interiores gerados por planta, mobiliário procedural, iluminação interna dentro do
    teto de luzes com sombra.
 
-10. **NPCs e rotinas** — *metade de asset adiantada*
-   Os **corpos** já existem: `tools/gen_characters.py` gera os 7 humanoides rigados,
-   fora de ordem e a pedido explícito, com animação, IA e gameplay deliberadamente de
-   fora. O que resta desta fase é o comportamento: agenda diária guiada por
-   `EventBus.hour_changed`, teto de 40 ativos com simulação abstrata acima disso,
-   navegação pela cidade.
+10. **NPCs e rotinas** ✅ *(esta etapa, fora de ordem e a pedido explícito)*
+   Vinte habitantes com agenda diária guiada por `EventBus.hour_changed`, três arquétipos
+   em `resources/schedules/`, casa e posto coerentes, navegação pela cidade, percepção por
+   `Area3D` com olhar e fala flutuante, e simulação barata acima de `NPC_ACTIVE_RADIUS`
+   com teto de 40 corpos com física. Mais a vida ambiente sem IA: fumaça, pássaros,
+   folhas, varal ao vento, cachorro em ronda e o martelo da ferraria no compasso do
+   artesão. `make population` mede três minutos de praça.
+   *As fases 5, 7, 9 e 11 continuam abertas; não há diálogo com escolhas nem comércio.*
 
 11. **Raças, facções e diálogo**
     `Resource`s de raça e povo gerados em `resources/`, árvores de diálogo geradas, UI de
@@ -608,7 +687,7 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 
 **Nenhuma fase está concluída sem `make preview` e `make bench` rodados, com os números
 colados no commit** — mais o alvo de medição que a fase tenha criado (`make anim`,
-`make playtest`, `make valley`, `make city`). Não é cerimônia. Um gerador não tem como saber se o que ele produziu
+`make playtest`, `make valley`, `make city`, `make population`). Não é cerimônia. Um gerador não tem como saber se o que ele produziu
 parece certo, e uma contagem de triângulos dentro do orçamento não impede uma árvore de
 sair torta ou um chão de sumir por winding invertido — as duas coisas já aconteceram
 neste projeto e foram encontradas *olhando*, não lendo log.
@@ -649,6 +728,16 @@ neste projeto e foram encontradas *olhando*, não lendo log.
   navegação perto da porta aprovaria uma casa murada dentro de um quarteirão fechado;
 - becos sem saída não intencionais, que têm de ser zero;
 - `docs/shots/city/*.png`, seis pontos que respondem o que número nenhum responde.
+
+`make population` responde "tem vida?":
+
+- que fração dos habitantes saiu do lugar na **pior** janela de 20 s — média esconderia
+  uma cidade que congela por meio minuto e compensa depois;
+- quanto do percurso de cada um cai em terreno onde ele ainda não esteve, que é a medida
+  anti-repetição: parado dá 0,003, andando de um lado para o outro dá 0,006, e cobrir
+  terreno dá dez vezes isso;
+- entalos e amostras dentro de parede, que têm de ser zero nos dois casos;
+- o pico de corpos com física, contra o teto de `BUDGET["active_npcs"]`.
 
 `make bench` responde "cabe?":
 

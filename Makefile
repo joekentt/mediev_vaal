@@ -15,10 +15,20 @@ GODOT ?= godot
 BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest valley city bench clean regen help
+.PHONY: all params project materials gaits player assets test-assets characters audio world verify warnings preview anim playtest valley city population bench clean regen help
+
+## Agendas diárias dos arquétipos em resources/schedules/.
+schedules:
+	@echo "== schedules =="
+	@$(PY) -m tools.gen_schedules
+
+## Cena do habitante em scenes/npc/.
+npc:
+	@echo "== npc =="
+	@$(PY) -m tools.gen_npc
 
 ## Regenera tudo e verifica. É o alvo que precisa passar antes de qualquer commit.
-all: params project materials gaits player assets characters audio world verify
+all: params project materials gaits schedules player npc assets characters audio world verify
 	@echo "== pronto: projeto regenerado e verificado =="
 
 ## scripts/core/params.gd a partir de tools/params.py.
@@ -115,6 +125,11 @@ city:
 	@echo "== city =="
 	@GODOT=$(GODOT) $(PY) -m tools.city $(SEED)
 
+## Roda 3 minutos de praça e cobra vida contínua, sem entalo e sem atravessar parede.
+population:
+	@echo "== population =="
+	@GODOT=$(GODOT) $(PY) -m tools.population
+
 ## Percorre a rota fixa, mede, e acrescenta uma linha a docs/bench_history.csv.
 ## Precisa do Godot com display.
 bench:
@@ -126,7 +141,7 @@ clean:
 	@echo "== clean =="
 	@rm -rf assets/generated
 	@rm -rf .godot
-	@rm -rf docs/assets docs/shots docs/anim docs/player docs/valley docs/assets.html docs/bench.json
+	@rm -rf docs/assets docs/shots docs/anim docs/player docs/valley docs/population docs/assets.html docs/bench.json
 	@find tools -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 	@echo "  derivado removido (docs/bench_history.csv é versionado e fica)"
 
@@ -151,6 +166,7 @@ help:
 	@echo "  make preview  renders do kit + catálogo + capturas da cena"
 	@echo "  make anim     tiras de quadros da locomoção (precisa do Godot)"
 	@echo "  make playtest dirige o jogador e mede o controle (precisa do Godot)"
+	@echo "  make population roda 3 min de praça e prova que a cidade tem vida (precisa do Godot)"
 	@echo "  make city     gera 3 cidades, valida e captura 6 pontos (precisa do Godot)"
 	@echo "  make valley   compara dois vales por seed (precisa do Godot)"
 	@echo "  make bench    mede a rota fixa e acumula docs/bench_history.csv"

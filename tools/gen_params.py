@@ -138,6 +138,30 @@ def _city_shots() -> str:
     return "\n".join(lines)
 
 
+def _character_bodies() -> str:
+    return ", ".join(f'&"{entry["name"]}"' for entry in P.CHARACTER_ROSTER)
+
+
+def _npc_archetypes() -> str:
+    lines = []
+    for spec in P.NPC_ARCHETYPES:
+        bodies = ", ".join(f'&"{b}"' for b in spec["bodies"])
+        lines.append(
+            f'\t{{"name": &"{spec["name"]}", "share": {P.num(spec["share"])}, '
+            f'"bodies": [{bodies}], "work": &"{spec["work"]}", '
+            f'"schedule": &"{spec["schedule"]}"}},'
+        )
+    return "\n".join(lines)
+
+
+def _npc_lines() -> str:
+    lines = []
+    for name, phrases in P.NPC_LINES.items():
+        joined = ", ".join(f'"{text}"' for text in phrases)
+        lines.append(f'\t&"{name}": [{joined}],')
+    return "\n".join(lines)
+
+
 def _anim_comparison() -> str:
     return ", ".join(f'"{name}"' for name in P.ANIM_GAIT_COMPARISON)
 
@@ -229,6 +253,7 @@ const TRI_BUDGET: Dictionary = {{
 # --- Render ------------------------------------------------------------------
 
 const SHADOW_MAX_DISTANCE: float = {P.num(P.SHADOW_MAX_DISTANCE)}
+const PHYSICS_TICKS_PER_SECOND: int = {P.PHYSICS_TICKS_PER_SECOND}
 const SHADOW_DIRECTIONAL_SPLITS: String = "{P.SHADOW_DIRECTIONAL_SPLITS}"
 const FOG_DENSITY: float = {P.num(P.FOG_DENSITY)}
 const FOG_SKY_AFFECT: float = {P.num(P.FOG_SKY_AFFECT)}
@@ -448,6 +473,87 @@ const CITY_MAX_DEAD_ENDS: int = {P.CITY_MAX_DEAD_ENDS}
 const CITY_SHOT_POINTS: Array[Array] = [
 {_city_shots()}
 ]
+
+# --- População ---------------------------------------------------------------
+
+## Corpos que `make characters` produz. O povoamento só sorteia entre estes.
+const CHARACTER_BODIES: Array[StringName] = [{_character_bodies()}]
+
+const NPC_SCENE: String = "res://{P.NPC_SCENE}"
+const NPC_DIR: String = "res://{P.NPC_DIR}"
+const NPC_COUNT: int = {P.NPC_COUNT}
+const NPC_SEED_OFFSET: int = {P.NPC_SEED_OFFSET}
+const NPC_WALK_SPEED: float = {P.num(P.NPC_WALK_SPEED)}
+const NPC_HURRY_SPEED: float = {P.num(P.NPC_HURRY_SPEED)}
+const NPC_TURN_RATE: float = {P.num(P.NPC_TURN_RATE)}
+const NPC_ARRIVE_RADIUS: float = {P.num(P.NPC_ARRIVE_RADIUS)}
+const NPC_REPATH_SECONDS: float = {P.num(P.NPC_REPATH_SECONDS)}
+const NPC_STUCK_SECONDS: float = {P.num(P.NPC_STUCK_SECONDS)}
+const NPC_STUCK_PROGRESS: float = {P.num(P.NPC_STUCK_PROGRESS)}
+const NPC_TARGET_SPREAD: float = {P.num(P.NPC_TARGET_SPREAD)}
+const NPC_IDLE_MIN: float = {P.num(P.NPC_IDLE_MIN)}
+const NPC_IDLE_MAX: float = {P.num(P.NPC_IDLE_MAX)}
+const NPC_WANDER_CHANCE: float = {P.num(P.NPC_WANDER_CHANCE)}
+const NPC_WANDER_RADIUS: float = {P.num(P.NPC_WANDER_RADIUS)}
+const NPC_WORK_BOB: float = {P.num(P.NPC_WORK_BOB)}
+const NPC_SENSE_RADIUS: float = {P.num(P.NPC_SENSE_RADIUS)}
+const NPC_LOOK_SECONDS: float = {P.num(P.NPC_LOOK_SECONDS)}
+const NPC_SPEAK_COOLDOWN: float = {P.num(P.NPC_SPEAK_COOLDOWN)}
+const NPC_SPEAK_CHANCE: float = {P.num(P.NPC_SPEAK_CHANCE)}
+const NPC_SPEAK_SECONDS: float = {P.num(P.NPC_SPEAK_SECONDS)}
+const NPC_SPEAK_HEIGHT: float = {P.num(P.NPC_SPEAK_HEIGHT)}
+const NPC_REACT_SECONDS: float = {P.num(P.NPC_REACT_SECONDS)}
+const NPC_SHADOW_RADIUS: float = {P.num(P.NPC_SHADOW_RADIUS)}
+const NPC_ACTIVE_RADIUS: float = {P.num(P.NPC_ACTIVE_RADIUS)}
+const NPC_ACTIVE_HYSTERESIS: float = {P.num(P.NPC_ACTIVE_HYSTERESIS)}
+const NPC_DIRECTOR_HZ: float = {P.num(P.NPC_DIRECTOR_HZ)}
+const NPC_ABSTRACT_SPEED: float = {P.num(P.NPC_ABSTRACT_SPEED)}
+
+## Falas curtas por arquétipo. Texto flutuante, não diálogo — a fase 11 traz a conversa.
+const NPC_LINES: Dictionary = {{
+{_npc_lines()}
+}}
+
+## Arquétipos: quem é, com que corpo, onde trabalha e com que rotina.
+const NPC_ARCHETYPES: Array[Dictionary] = [
+{_npc_archetypes()}
+]
+
+# --- Vida ambiente -----------------------------------------------------------
+
+const AMBIENT_SMOKE_CHIMNEYS: int = {P.AMBIENT_SMOKE_CHIMNEYS}
+const AMBIENT_SMOKE_PARTICLES: int = {P.AMBIENT_SMOKE_PARTICLES}
+const AMBIENT_SMOKE_LIFETIME: float = {P.num(P.AMBIENT_SMOKE_LIFETIME)}
+const AMBIENT_SMOKE_RISE: float = {P.num(P.AMBIENT_SMOKE_RISE)}
+const AMBIENT_SMOKE_SCALE: float = {P.num(P.AMBIENT_SMOKE_SCALE)}
+const AMBIENT_BIRD_FLOCKS: int = {P.AMBIENT_BIRD_FLOCKS}
+const AMBIENT_BIRDS_PER_FLOCK: int = {P.AMBIENT_BIRDS_PER_FLOCK}
+const AMBIENT_BIRD_HEIGHT: float = {P.num(P.AMBIENT_BIRD_HEIGHT)}
+const AMBIENT_BIRD_RADIUS: float = {P.num(P.AMBIENT_BIRD_RADIUS)}
+const AMBIENT_BIRD_SECONDS: float = {P.num(P.AMBIENT_BIRD_SECONDS)}
+const AMBIENT_BIRD_SPREAD: float = {P.num(P.AMBIENT_BIRD_SPREAD)}
+const AMBIENT_LEAF_COUNT: int = {P.AMBIENT_LEAF_COUNT}
+const AMBIENT_LEAF_LIFETIME: float = {P.num(P.AMBIENT_LEAF_LIFETIME)}
+const AMBIENT_LEAF_FALL: float = {P.num(P.AMBIENT_LEAF_FALL)}
+const AMBIENT_LEAF_SCALE: float = {P.num(P.AMBIENT_LEAF_SCALE)}
+const AMBIENT_WIND_SPEED: float = {P.num(P.AMBIENT_WIND_SPEED)}
+const AMBIENT_WIND_SWAY_DEG: float = {P.num(P.AMBIENT_WIND_SWAY_DEG)}
+const AMBIENT_DOG_SPEED: float = {P.num(P.AMBIENT_DOG_SPEED)}
+const AMBIENT_DOG_PAUSE: float = {P.num(P.AMBIENT_DOG_PAUSE)}
+const AMBIENT_DOG_STOPS: int = {P.AMBIENT_DOG_STOPS}
+const AMBIENT_HAMMER_PERIOD: float = {P.num(P.AMBIENT_HAMMER_PERIOD)}
+const AMBIENT_HAMMER_LIFT: float = {P.num(P.AMBIENT_HAMMER_LIFT)}
+
+# --- População: prova --------------------------------------------------------
+
+const POPULATION_DIR: String = "res://{P.POPULATION_DIR}"
+const POPULATION_SECONDS: float = {P.num(P.POPULATION_SECONDS)}
+const POPULATION_SAMPLE_HZ: float = {P.num(P.POPULATION_SAMPLE_HZ)}
+const POPULATION_MIN_MOVERS: float = {P.num(P.POPULATION_MIN_MOVERS)}
+const POPULATION_WINDOW: float = {P.num(P.POPULATION_WINDOW)}
+const POPULATION_MIN_NOVELTY: float = {P.num(P.POPULATION_MIN_NOVELTY)}
+const POPULATION_MAX_STUCK: int = {P.POPULATION_MAX_STUCK}
+const POPULATION_MAX_CLIPPING: int = {P.POPULATION_MAX_CLIPPING}
 
 # --- Jogador -----------------------------------------------------------------
 
