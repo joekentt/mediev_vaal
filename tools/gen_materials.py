@@ -19,12 +19,15 @@ OUTPUT_DIR = Path("assets/generated/materials")
 
 
 def _material_resource(name: str, color_key: str, roughness: float, metallic: float) -> str:
+    # `cull_mode = 2` é DISABLED: desenha os dois lados. Só quem está em
+    # `DOUBLE_SIDED_MATERIALS` recebe, e o motivo está lá.
+    culling = "cull_mode = 2\n" if name in P.DOUBLE_SIDED_MATERIALS else ""
     return f"""{GENERATED_HEADER('tools/gen_materials.py', 'tools/params.py', ';')}
 [gd_resource type="StandardMaterial3D" format=3]
 
 [resource]
 resource_name = "{name}"
-albedo_color = {P.color_literal(P.PALETTE[color_key])}
+{culling}albedo_color = {P.color_literal(P.PALETTE[color_key])}
 metallic = {P.num(metallic)}
 roughness = {P.num(roughness)}
 vertex_color_use_as_albedo = true

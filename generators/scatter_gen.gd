@@ -28,7 +28,7 @@ const PROXY_CATEGORY: StringName = &"prop"
 const VERTS_PER_TRIANGLE: int = 3
 const FOLIAGE_MATERIAL: StringName = &"foliage"
 ## Material dos proxies de LOD — um só, para todos os tipos. Ver `_build_band`.
-const PROXY_MATERIAL: StringName = &"proxy"
+const PROXY_MATERIAL: StringName = Params.KIT_MATERIAL
 
 ## Prisma unitário por faixa, construído uma vez. São duas malhas de oito triângulos para o
 ## vale inteiro: reconstruí-las por bloco daria 32 malhas idênticas e nenhum agrupamento.
@@ -204,6 +204,9 @@ static func _build_band(
 	node.name = "%s_%d_%d_lod%d" % [part, tile_x, tile_z, band]
 	node.multimesh = multi
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	# Mesmo material do resto do kit: a peça vem do seu próprio `.glb` com uma cópia
+	# idêntica dentro, e cópia idêntica é troca de estado paga por nada.
+	node.material_override = MaterialLibrary.get_material(PROXY_MATERIAL)
 	_apply_range(node, band)
 	return node
 

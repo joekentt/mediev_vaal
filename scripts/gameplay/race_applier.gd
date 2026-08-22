@@ -80,6 +80,7 @@ func apply(who: StringName) -> bool:
 	_mounted = packed.instantiate() as Node3D
 	_mounted.name = MOUNT_NAME
 	add_child(_mounted)
+	_share_material(_mounted)
 
 	var record: Dictionary = _manifest_entry(who)
 	_height = float(record.get("height", 0.0))
@@ -89,6 +90,20 @@ func apply(who: StringName) -> bool:
 	_tune_locomotion()
 	body_applied.emit(body, _height)
 	return true
+
+
+## Faz o corpo desenhar com o material compartilhado do kit.
+##
+## Cada `.glb` de personagem chega com o próprio `character_flat`, e a auditoria mediu
+## cinco recursos idênticos em cena — um por corpo carregado. São todos brancos com vertex
+## color, exatamente como o material do kit, então compartilhar não muda um pixel e devolve
+## quatro entradas do orçamento de materiais únicos.
+static func _share_material(node: Node) -> void:
+	var mesh: MeshInstance3D = node as MeshInstance3D
+	if mesh != null:
+		mesh.material_override = MaterialLibrary.get_material(Params.KIT_MATERIAL)
+	for child: Node in node.get_children():
+		_share_material(child)
 
 
 ## Dados do corpo no manifesto de `make characters`.

@@ -49,8 +49,25 @@ const SPAWN_CLEARANCE: float = 0.4
 static var last_field: HeightField = null
 ## Traçado da última cidade gerada. `make city` mede daqui; a fase 10 vai ler os marcadores.
 static var last_city: CityLayout = null
+## Curva da última estrada. A abertura acampa em cima dela, e as lanternas a seguem.
+static var last_curve: Curve3D = null
 ## Estatística da última geração. Vai para `docs/bench.json` e para o relatório da prova.
 static var last_report: Dictionary = {}
+
+
+## Seed pedida em runtime, que vence a do manifesto. É o que faz "carregar partida"
+## significar alguma coisa: o save guarda a seed, e o mundo tem de nascer daquela e não da
+## que estiver no manifesto do disco de quem está jogando.
+static var _seed_override: int = NO_SEED
+const NO_SEED: int = -1
+
+
+static func override_seed(world_seed: int) -> void:
+	_seed_override = world_seed
+
+
+static func clear_seed_override() -> void:
+	_seed_override = NO_SEED
 
 
 ## Constrói o vale inteiro sob `root`, substituindo o que já estiver lá.
@@ -77,6 +94,7 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 	CityGenerator.plan_streets(layout, curve, world_seed)
 	last_field = field
 	last_city = layout
+	last_curve = curve
 
 	var problems: PackedStringArray = CityGenerator.validate(layout)
 	for problem: String in problems:
@@ -161,6 +179,34 @@ static func build_stage(root: Node3D, with_player: bool = true) -> Node3D:
 			(atmosphere["soundscape"] as Soundscape).set_listener(player)
 			(atmosphere["weather"] as WeatherSystem).set_focus(player)
 	return stage
+
+
+## Monta a abertura e põe o jogador dentro dela.
+##
+## Separado de `build_stage` porque só a partida nova acorda no acampamento: quem carrega
+## um save já esteve lá, e reconstruir a cena de abertura por cima dele seria contar a
+## mesma história duas vezes. O mundo é o mesmo nos dois casos; o que muda é onde se entra.
+static func begin_opening(stage: Node3D, player: Node3D) -> Dictionary:
+	var opening: Dictionary = OpeningGenerator.build(
+		last_field, last_curve, last_city, stage, current_seed()
+	)
+	if opening.is_empty():
+		return opening
+
+	var time: Node = stage.get_node_or_null(^"/root/TimeSystem")
+	if time != null:
+		time.set_time_of_day(Params.OPENING_HOUR)
+	var cycle: DayNightCycle = stage.find_child(String(CYCLE_NODE_NAME), true, false) as DayNightCycle
+	if cycle != null:
+		cycle.apply_now()
+
+	if player != null:
+		player.global_position = opening["position"]
+		player.rotation.y = float(opening["facing"])
+		var camera: ThirdPersonCamera = player.get_node_or_null(^"CameraArm") as ThirdPersonCamera
+		if camera != null:
+			camera.wake(Params.OPENING_LOOK_SECONDS)
+	return opening
 
 
 ## Ciclo do dia, clima e paisagem sonora, sob o estágio.
@@ -254,6 +300,8 @@ static func _fresh_stage(root: Node3D) -> Node3D:
 ## escreve a seed no manifesto, o jogo lê. Sem manifesto — árvore recém-clonada —, vale a
 ## seed de fábrica de `params.py`.
 static func current_seed() -> int:
+	if _seed_override != NO_SEED:
+		return _seed_override
 	var file: FileAccess = FileAccess.open(
 		Params.GENERATED_DIR + MANIFEST_PATH, FileAccess.READ
 	)
@@ -331,7 +379,7 @@ static func build_sun() -> DirectionalLight3D:
 	sun.light_color = Params.color(&"sun")
 	sun.light_energy = Params.STAGE_SUN_ENERGY
 	sun.shadow_enabled = true
-	sun.directional_shadow_mode = _splits_from_name(Params.SHADOW_DIRECTIONAL_SPLITS)
+	sun.directional_shadow_mode = splits_from_name(Params.SHADOW_DIRECTIONAL_SPLITS)
 	sun.directional_shadow_max_distance = Params.SHADOW_MAX_DISTANCE
 	sun.position = Vector3(0.0, Params.STAGE_SUN_HEIGHT, 0.0)
 	sun.rotation = Vector3(
@@ -346,7 +394,7 @@ static func build_sun() -> DirectionalLight3D:
 ##
 ## Cada cascata redesenha todo caster dentro do alcance da sombra, então este é um botão de
 ## draw calls disfarçado de botão de qualidade.
-static func _splits_from_name(name: String) -> DirectionalLight3D.ShadowMode:
+static func splits_from_name(name: String) -> DirectionalLight3D.ShadowMode:
 	if name == SPLITS_ORTHOGONAL:
 		return DirectionalLight3D.SHADOW_ORTHOGONAL
 	if name == SPLITS_FOUR:

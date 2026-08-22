@@ -34,6 +34,21 @@ var player_race: StringName = Params.PLAYER_BODY
 ## irritante desliga e continua lendo o texto, que é onde a informação está de verdade.
 var voice_enabled: bool = true
 
+# --- Opções de vídeo e áudio -------------------------------------------------
+# Ficam aqui porque preferência é estado global e este é o autoload de estado global.
+# Quem as aplica no motor é `Settings`, e quem as escreve em disco também: este arquivo
+# guarda o valor, não sabe o que ele faz.
+
+## Preset de qualidade (ver `Params.QUALITY_PRESETS`). "media" é o alvo do projeto.
+var quality: StringName = Params.QUALITY_DEFAULT
+## Fator sobre o alcance de sombra e de LOD.
+var render_distance: float = Params.RENDER_DISTANCE_DEFAULT
+## Fator sobre `NPC_COUNT`. Vale na geração do mundo, não com o jogo aberto.
+var npc_density: float = Params.NPC_DENSITY_DEFAULT
+var vsync_enabled: bool = Params.VSYNC_DEFAULT
+## Volume linear por barramento, como um slider espera.
+var volumes: Dictionary = Params.VOLUME_DEFAULTS.duplicate()
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -93,6 +108,17 @@ func clear_flags() -> void:
 	_world_flags.clear()
 
 
+## Cópia das flags, para o save. Cópia e não a referência: quem salva não escreve no mundo.
+func flags() -> Dictionary:
+	return _world_flags.duplicate()
+
+
+## Repõe as flags de um save. Substitui em vez de mesclar: carregar uma partida é entrar
+## naquele mundo, não somar dois.
+func load_flags(data: Dictionary) -> void:
+	_world_flags = data.duplicate()
+
+
 ## Reputação com uma facção, presa aos limites de `Params`.
 ##
 ## Um inteiro por facção e nada mais. Diálogo lê e escreve; nada além dele depende disto
@@ -118,17 +144,35 @@ func clear_reputation() -> void:
 	_reputation.clear()
 
 
+## Cópia da reputação por facção, para o save.
+func reputations() -> Dictionary:
+	return _reputation.duplicate()
+
+
+## Repõe a reputação de um save, ignorando facção que não existe mais nesta versão.
+func load_reputations(data: Dictionary) -> void:
+	_reputation.clear()
+	for faction: Variant in data:
+		var key: StringName = StringName(faction)
+		if not Params.FACTIONS.has(key):
+			push_warning("Save cita facção desconhecida: %s. Ignorando." % key)
+			continue
+		_reputation[key] = clampi(
+			int(data[faction]), Params.REPUTATION_MIN, Params.REPUTATION_MAX
+		)
+
+
 ## Contexto para as condições de diálogo.
 ##
 ## Montado aqui e passado por valor, porque `DialogueTree` não conhece — e não deve
 ## conhecer — o `GameState`: ela é um `Resource` avaliável fora do jogo, e a prova de
 ## diálogo depende disso para rodar uma árvore inteira sem abrir uma janela.
 func dialogue_context() -> Dictionary:
-	var reputations: Dictionary = {}
+	var by_faction: Dictionary = {}
 	for faction: StringName in Params.FACTIONS:
-		reputations[faction] = reputation(faction)
+		by_faction[faction] = reputation(faction)
 	return {
 		DialogueTree.CONTEXT_FLAGS: _world_flags.duplicate(),
-		DialogueTree.CONTEXT_REPUTATION: reputations,
+		DialogueTree.CONTEXT_REPUTATION: by_faction,
 		DialogueTree.CONTEXT_RACE: player_race,
 	}

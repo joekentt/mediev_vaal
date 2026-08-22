@@ -145,7 +145,7 @@ static func _puff_mesh() -> Mesh:
 
 static func _build_birds(layout: CityLayout, root: AmbientLife, rng: RandomNumberGenerator) -> int:
 	var mesh: Mesh = _bird_mesh()
-	var material: StandardMaterial3D = MaterialLibrary.get_material(&"proxy")
+	var material: StandardMaterial3D = MaterialLibrary.get_material(Params.KIT_MATERIAL)
 	var total: int = 0
 
 	for flock_index: int in Params.AMBIENT_BIRD_FLOCKS:
@@ -336,7 +336,7 @@ static func _build_dog(
 	var body: MeshInstance3D = MeshInstance3D.new()
 	body.name = "Dog"
 	body.mesh = _dog_mesh()
-	body.material_override = MaterialLibrary.get_material(&"proxy")
+	body.material_override = MaterialLibrary.get_material(Params.KIT_MATERIAL)
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(body)
 

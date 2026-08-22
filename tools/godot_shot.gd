@@ -36,18 +36,15 @@ func _initialize() -> void:
 	_capture.call_deferred()
 
 
+## Constrói o mundo direto, sem passar por `main.tscn`: a cena principal abre no menu
+## desde o MVP, e as capturas querem o vale, não a tela de título.
 func _capture() -> void:
-	var packed: PackedScene = ResourceLoader.load(SCENE_PATH) as PackedScene
-	if packed == null:
-		push_error("Não consegui carregar %s" % SCENE_PATH)
-		quit(1)
-		return
+	var holder: Node3D = Node3D.new()
+	root.add_child(holder)
+	_root = WorldGenerator.build_stage(holder)
 
-	_root = packed.instantiate() as Node3D
-	root.add_child(_root)
-
-	# O mundo é construído no `_ready` da cena; sem esperar, a primeira captura sairia
-	# de um mundo pela metade.
+	# O assado de navegação e o LOD precisam de alguns quadros para assentar; sem esperar,
+	# a primeira captura sairia de um mundo pela metade.
 	for _frame: int in Params.BENCH_WARMUP_FRAMES:
 		await process_frame
 

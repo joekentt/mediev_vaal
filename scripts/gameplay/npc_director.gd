@@ -89,6 +89,11 @@ func _reassign() -> void:
 		var wanted: bool = gap <= threshold and _active_count < ceiling
 		npc.set_simulated(wanted)
 		npc.set_shadow_casting(wanted and gap <= Params.NPC_SHADOW_RADIUS)
+		# Quem está perto pensa a cada quadro de física; quem está longe pensa a cada
+		# `NPC_FAR_STRIDE` quadros, com o tempo acumulado. Anda a mesma distância em menos
+		# passos — e a 1 m/s, três quadros são cinco centímetros: ninguém atravessa parede
+		# por isso, e ninguém vê a diferença a vinte metros.
+		npc.set_stride(1 if gap <= Params.NPC_NEAR_RADIUS else Params.NPC_FAR_STRIDE)
 		if wanted:
 			_active_count += 1
 

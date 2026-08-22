@@ -90,7 +90,7 @@ const MATERIALS: Dictionary = {
 	&"cloth":    {"color": &"cloth_cream", "roughness": 0.95, "metallic": 0},
 	&"water":    {"color": &"water", "roughness": 0.15, "metallic": 0},
 	&"ground":   {"color": &"ground_default", "roughness": 0.95, "metallic": 0},
-	&"proxy":    {"color": &"proxy_neutral", "roughness": 1, "metallic": 0},
+	&"kit":      {"color": &"proxy_neutral", "roughness": 1, "metallic": 0},
 	&"debug":    {"color": &"debug_magenta", "roughness": 1, "metallic": 0},
 }
 
@@ -99,6 +99,9 @@ const MATERIALS: Dictionary = {
 const GLOW_MATERIAL: StringName = &"glow"
 const GLOW_ENERGY: float = 2.4
 const RAIN_MATERIAL: StringName = &"rain"
+## Material branco compartilhado por toda malha que vem do kit ou dos corpos. Ver o
+## comentário de `MATERIALS["kit"]` em `tools/params.py`.
+const KIT_MATERIAL: StringName = &"kit"
 const RAIN_ENERGY: float = 0.4
 
 # --- Escala do mundo ---------------------------------------------------------
@@ -328,6 +331,67 @@ const MOUSE_SENSITIVITY: float = 0.12
 const MOUSE_SENSITIVITY_MIN: float = 0.02
 const MOUSE_SENSITIVITY_MAX: float = 1
 
+# --- Opções do jogador -------------------------------------------------------
+
+const QUALITY_LEVELS: Array[StringName] = [&"baixa", &"media", &"alta"]
+const QUALITY_DEFAULT: StringName = &"media"
+
+## Presets de qualidade. Cada um é um conjunto de botões que o jogador não deveria ter de
+## entender um a um — quem os aplica é `Settings`.
+const QUALITY_PRESETS: Dictionary = {
+	&"baixa": {&"msaa": 0, &"shadow_size": 2048, &"shadow_distance": 70, &"splits": "orthogonal", &"shadow_filter": 0, &"scatter": 0.55, &"lod_scale": 0.7, &"debanding": false, &"occlusion": true, &"particles": 0.4},
+	&"media": {&"msaa": 1, &"shadow_size": 4096, &"shadow_distance": 120, &"splits": "2_splits", &"shadow_filter": 3, &"scatter": 1, &"lod_scale": 1, &"debanding": true, &"occlusion": true, &"particles": 1},
+	&"alta": {&"msaa": 2, &"shadow_size": 4096, &"shadow_distance": 180, &"splits": "4_splits", &"shadow_filter": 4, &"scatter": 1, &"lod_scale": 1.4, &"debanding": true, &"occlusion": true, &"particles": 1},
+}
+
+const RENDER_DISTANCE_MIN: float = 0.5
+const RENDER_DISTANCE_MAX: float = 1.5
+const RENDER_DISTANCE_DEFAULT: float = 1
+const NPC_DENSITY_MIN: float = 0.25
+const NPC_DENSITY_MAX: float = 1
+const NPC_DENSITY_DEFAULT: float = 1
+const VSYNC_DEFAULT: bool = true
+
+## Volume inicial de cada barramento, em escala linear.
+const VOLUME_DEFAULTS: Dictionary = {
+	&"Master": 0.9,
+	&"Music": 0.7,
+	&"SFX": 0.9,
+	&"Ambience": 0.8,
+}
+
+const SETTINGS_PATH: String = "user://settings.json"
+const SAVE_PATH: String = "user://save.json"
+const SAVE_VERSION: int = 1
+
+# --- Interface ---------------------------------------------------------------
+
+const UI_TITLE_FONT_SIZE: int = 64
+const UI_FONT_SIZE: int = 22
+const UI_SMALL_FONT_SIZE: int = 17
+const UI_BUTTON_WIDTH: int = 340
+const UI_BUTTON_HEIGHT: int = 46
+const UI_MARGIN: int = 56
+const UI_SPACING: int = 12
+const UI_FADE_SECONDS: float = 0.35
+const UI_PANEL_ALPHA: float = 0.86
+const UI_SLIDER_WIDTH: int = 260
+const FPS_REFRESH_HZ: float = 4
+const FPS_FONT_SIZE: int = 16
+
+# --- Abertura ----------------------------------------------------------------
+
+const OPENING_HOUR: float = 6.4
+const OPENING_CAMP_ROAD_T: float = 0.62
+const OPENING_CAMP_OFFSET: float = 7
+const OPENING_CAMP_PROPS: int = 5
+const OPENING_CAMP_RADIUS: float = 3.2
+const OPENING_FIRE_PARTICLES: int = 26
+const OPENING_FIRE_HEIGHT: float = 0.9
+const OPENING_FIRE_SCALE: float = 0.42
+const OPENING_LOOK_SECONDS: float = 2.2
+const OPENING_LANTERN_SPACING: float = 26
+
 # --- Geração -----------------------------------------------------------------
 
 const WORLD_SEED: int = 20250107
@@ -544,6 +608,8 @@ const NPC_SPEAK_HEIGHT: float = 0.35
 const NPC_REACT_SECONDS: float = 1.4
 const NPC_SHADOW_RADIUS: float = 26
 const NPC_ACTIVE_RADIUS: float = 60
+const NPC_NEAR_RADIUS: float = 22
+const NPC_FAR_STRIDE: int = 3
 const NPC_ACTIVE_HYSTERESIS: float = 8
 const NPC_DIRECTOR_HZ: float = 4
 const NPC_ABSTRACT_SPEED: float = 1.9
@@ -889,6 +955,16 @@ const BENCH_ROUTE: Array[Vector3] = [
 	Vector3(-40, 3, -170),
 	Vector3(-160, 3, 40),
 ]
+## Estações do bench: nome, marcador, distância, altura, pitch, giro e se lota a praça.
+const BENCH_STATIONS: Array[Array] = [
+	[&"vale", &"portao", 170, 0, -4, 180, false],
+	[&"portao", &"portao", 19, 5, -10, 0, false],
+	[&"praca", &"praca", 16, 4, -12, 0, true],
+]
+const BENCH_STATION_SETTLE: int = 24
+const BENCH_STATION_FRAMES: int = 90
+const BENCH_CROWD_RADIUS: float = 9
+
 const BENCH_ROUTE_SECONDS: float = 14
 const BENCH_CAMERA_CLEARANCE: float = 2.4
 const BENCH_LOW_PERCENTILE: float = 1

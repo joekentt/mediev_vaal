@@ -167,12 +167,48 @@ func follow(delta: float) -> void:
 		_follow_conversation(anchor, delta)
 		return
 
+	_tick_wake(delta)
 	global_position = global_position.lerp(anchor, _smoothing(follow_lag, delta))
 	rotation = Vector3(_pitch, _yaw, 0.0)
 
 	_distance = lerpf(_distance, distance, _smoothing(follow_lag, delta))
 	spring_length = _distance + _shake_offset(delta)
 	_update_fov(delta)
+
+
+## Abre os olhos: a câmera parte do chão e sobe até a linha do horizonte.
+##
+## É a abertura do jogo, e é tudo o que ela é — não há corte, não há letreiro, não há texto.
+## Começar olhando para o chão e terminar olhando para a estrada é o que transforma
+## "apareci num vale" em "acordei aqui", e custa uma interpolação de pitch.
+func wake(seconds: float) -> void:
+	_wake_left = maxf(seconds, 0.0)
+	_wake_total = _wake_left
+	_pitch = deg_to_rad(pitch_min_deg)
+
+
+var _wake_left: float = 0.0
+var _wake_total: float = 0.0
+
+
+## Ainda abrindo os olhos? A prova lê daqui.
+func is_waking() -> bool:
+	return _wake_left > 0.0
+
+
+func _tick_wake(delta: float) -> void:
+	if _wake_left <= 0.0:
+		return
+	_wake_left = maxf(_wake_left - delta, 0.0)
+	# Ease-out: o olhar sobe depressa e desacelera ao chegar na linha do horizonte, que é
+	# como uma cabeça que se levanta se comporta. Linear parece elevador.
+	var travelled: float = 1.0 - _wake_left / maxf(_wake_total, MIN_TIME)
+	var eased: float = 1.0 - pow(1.0 - travelled, WAKE_EASE)
+	_pitch = lerpf(deg_to_rad(pitch_min_deg), deg_to_rad(start_pitch_deg), eased)
+
+
+const WAKE_EASE: float = 3.0
+const MIN_TIME: float = 0.001
 
 
 ## Enquadramento de ombro: o braço encolhe, escorrega para o lado e aponta para a cabeça

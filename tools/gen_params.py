@@ -63,6 +63,39 @@ def _shot_points() -> str:
     return "\n".join(lines)
 
 
+def _quality_presets() -> str:
+    lines = []
+    for name, preset in P.QUALITY_PRESETS.items():
+        fields = []
+        for key, value in preset.items():
+            if isinstance(value, bool):
+                fields.append(f'&"{key}": {"true" if value else "false"}')
+            elif isinstance(value, str):
+                fields.append(f'&"{key}": "{value}"')
+            elif isinstance(value, int):
+                fields.append(f'&"{key}": {value}')
+            else:
+                fields.append(f'&"{key}": {P.num(value)}')
+        lines.append(f'\t&"{name}": {{{", ".join(fields)}}},')
+    return "\n".join(lines)
+
+
+def _volume_defaults() -> str:
+    return "\n".join(
+        f'\t&"{bus}": {P.num(level)},' for bus, level in P.VOLUME_DEFAULTS.items()
+    )
+
+
+def _bench_stations() -> str:
+    lines = []
+    for name, marker, distance, height, pitch, turn, crowd in P.BENCH_STATIONS:
+        lines.append(
+            f'\t[&"{name}", &"{marker}", {P.num(distance)}, {P.num(height)}, '
+            f'{P.num(pitch)}, {P.num(turn)}, {"true" if crowd else "false"}],'
+        )
+    return "\n".join(lines)
+
+
 def _bench_route() -> str:
     return "\n".join(f"\t{_vec3(point)}," for point in P.BENCH_ROUTE)
 
@@ -280,6 +313,9 @@ const MATERIALS: Dictionary = {{
 const GLOW_MATERIAL: StringName = &"glow"
 const GLOW_ENERGY: float = {P.num(P.EMISSIVE_MATERIALS["glow"][1])}
 const RAIN_MATERIAL: StringName = &"rain"
+## Material branco compartilhado por toda malha que vem do kit ou dos corpos. Ver o
+## comentário de `MATERIALS["kit"]` em `tools/params.py`.
+const KIT_MATERIAL: StringName = &"kit"
 const RAIN_ENERGY: float = {P.num(P.EMISSIVE_MATERIALS["rain"][1])}
 
 # --- Escala do mundo ---------------------------------------------------------
@@ -468,6 +504,62 @@ const SOUNDSCAPE_CROSSFADE_TOLERANCE: float = {P.num(P.SOUNDSCAPE_CROSSFADE_TOLE
 const MOUSE_SENSITIVITY: float = {P.num(P.MOUSE_SENSITIVITY)}
 const MOUSE_SENSITIVITY_MIN: float = {P.num(P.MOUSE_SENSITIVITY_MIN)}
 const MOUSE_SENSITIVITY_MAX: float = {P.num(P.MOUSE_SENSITIVITY_MAX)}
+
+# --- Opções do jogador -------------------------------------------------------
+
+const QUALITY_LEVELS: Array[StringName] = [{_names(P.QUALITY_LEVELS)}]
+const QUALITY_DEFAULT: StringName = &"{P.QUALITY_DEFAULT}"
+
+## Presets de qualidade. Cada um é um conjunto de botões que o jogador não deveria ter de
+## entender um a um — quem os aplica é `Settings`.
+const QUALITY_PRESETS: Dictionary = {{
+{_quality_presets()}
+}}
+
+const RENDER_DISTANCE_MIN: float = {P.num(P.RENDER_DISTANCE_MIN)}
+const RENDER_DISTANCE_MAX: float = {P.num(P.RENDER_DISTANCE_MAX)}
+const RENDER_DISTANCE_DEFAULT: float = {P.num(P.RENDER_DISTANCE_DEFAULT)}
+const NPC_DENSITY_MIN: float = {P.num(P.NPC_DENSITY_MIN)}
+const NPC_DENSITY_MAX: float = {P.num(P.NPC_DENSITY_MAX)}
+const NPC_DENSITY_DEFAULT: float = {P.num(P.NPC_DENSITY_DEFAULT)}
+const VSYNC_DEFAULT: bool = {"true" if P.VSYNC_DEFAULT else "false"}
+
+## Volume inicial de cada barramento, em escala linear.
+const VOLUME_DEFAULTS: Dictionary = {{
+{_volume_defaults()}
+}}
+
+const SETTINGS_PATH: String = "{P.SETTINGS_PATH}"
+const SAVE_PATH: String = "{P.SAVE_PATH}"
+const SAVE_VERSION: int = {P.SAVE_VERSION}
+
+# --- Interface ---------------------------------------------------------------
+
+const UI_TITLE_FONT_SIZE: int = {P.UI_TITLE_FONT_SIZE}
+const UI_FONT_SIZE: int = {P.UI_FONT_SIZE}
+const UI_SMALL_FONT_SIZE: int = {P.UI_SMALL_FONT_SIZE}
+const UI_BUTTON_WIDTH: int = {P.UI_BUTTON_WIDTH}
+const UI_BUTTON_HEIGHT: int = {P.UI_BUTTON_HEIGHT}
+const UI_MARGIN: int = {P.UI_MARGIN}
+const UI_SPACING: int = {P.UI_SPACING}
+const UI_FADE_SECONDS: float = {P.num(P.UI_FADE_SECONDS)}
+const UI_PANEL_ALPHA: float = {P.num(P.UI_PANEL_ALPHA)}
+const UI_SLIDER_WIDTH: int = {P.UI_SLIDER_WIDTH}
+const FPS_REFRESH_HZ: float = {P.num(P.FPS_REFRESH_HZ)}
+const FPS_FONT_SIZE: int = {P.FPS_FONT_SIZE}
+
+# --- Abertura ----------------------------------------------------------------
+
+const OPENING_HOUR: float = {P.num(P.OPENING_HOUR)}
+const OPENING_CAMP_ROAD_T: float = {P.num(P.OPENING_CAMP_ROAD_T)}
+const OPENING_CAMP_OFFSET: float = {P.num(P.OPENING_CAMP_OFFSET)}
+const OPENING_CAMP_PROPS: int = {P.OPENING_CAMP_PROPS}
+const OPENING_CAMP_RADIUS: float = {P.num(P.OPENING_CAMP_RADIUS)}
+const OPENING_FIRE_PARTICLES: int = {P.OPENING_FIRE_PARTICLES}
+const OPENING_FIRE_HEIGHT: float = {P.num(P.OPENING_FIRE_HEIGHT)}
+const OPENING_FIRE_SCALE: float = {P.num(P.OPENING_FIRE_SCALE)}
+const OPENING_LOOK_SECONDS: float = {P.num(P.OPENING_LOOK_SECONDS)}
+const OPENING_LANTERN_SPACING: float = {P.num(P.OPENING_LANTERN_SPACING)}
 
 # --- Geração -----------------------------------------------------------------
 
@@ -672,6 +764,8 @@ const NPC_SPEAK_HEIGHT: float = {P.num(P.NPC_SPEAK_HEIGHT)}
 const NPC_REACT_SECONDS: float = {P.num(P.NPC_REACT_SECONDS)}
 const NPC_SHADOW_RADIUS: float = {P.num(P.NPC_SHADOW_RADIUS)}
 const NPC_ACTIVE_RADIUS: float = {P.num(P.NPC_ACTIVE_RADIUS)}
+const NPC_NEAR_RADIUS: float = {P.num(P.NPC_NEAR_RADIUS)}
+const NPC_FAR_STRIDE: int = {P.NPC_FAR_STRIDE}
 const NPC_ACTIVE_HYSTERESIS: float = {P.num(P.NPC_ACTIVE_HYSTERESIS)}
 const NPC_DIRECTOR_HZ: float = {P.num(P.NPC_DIRECTOR_HZ)}
 const NPC_ABSTRACT_SPEED: float = {P.num(P.NPC_ABSTRACT_SPEED)}
@@ -955,6 +1049,14 @@ const SHOT_POINTS: Array = [
 const BENCH_ROUTE: Array[Vector3] = [
 {_bench_route()}
 ]
+## Estações do bench: nome, marcador, distância, altura, pitch, giro e se lota a praça.
+const BENCH_STATIONS: Array[Array] = [
+{_bench_stations()}
+]
+const BENCH_STATION_SETTLE: int = {P.BENCH_STATION_SETTLE}
+const BENCH_STATION_FRAMES: int = {P.BENCH_STATION_FRAMES}
+const BENCH_CROWD_RADIUS: float = {P.num(P.BENCH_CROWD_RADIUS)}
+
 const BENCH_ROUTE_SECONDS: float = {P.num(P.BENCH_ROUTE_SECONDS)}
 const BENCH_CAMERA_CLEARANCE: float = {P.num(P.BENCH_CAMERA_CLEARANCE)}
 const BENCH_LOW_PERCENTILE: float = {P.num(P.BENCH_LOW_PERCENTILE)}

@@ -111,12 +111,26 @@ MATERIALS: dict[str, tuple[str, float, float]] = {
     "cloth":     ("cloth_cream",    0.95, 0.0),
     "water":     ("water",          0.15, 0.0),
     "ground":    ("ground_default", 0.95, 0.0),
-    # Um material para todos os proxies de LOD, de qualquer tipo. A cor vem do vertex
-    # color; o material só existe para o proxy não nascer com o branco padrão do Godot,
-    # que ignora vertex color e pintava o vale inteiro de cones claros além de 92 m.
-    "proxy":     ("proxy_neutral",  1.00, 0.0),
+    # O material branco de **tudo que vem do kit** — peça inteira, corpo de habitante ou
+    # proxy de LOD. A cor está no vértice; o material é branco justamente para deixá-la
+    # passar intacta (`vertex_color_use_as_albedo` multiplica albedo por vertex color).
+    #
+    # Ele existe porque a intenção do gerador não sobreviveu ao formato de arquivo:
+    # `meshlib.flat_material` cria um material só para o kit inteiro, mas cada peça é
+    # exportada no **seu** .glb, e o Godot importa um recurso de material por arquivo. A
+    # auditoria mediu 28 materiais `kit_flat` distintos e 5 `character_flat`, todos
+    # idênticos, contra um teto de 16 materiais únicos. Um `material_override` compartilhado
+    # na hora de instanciar desfaz isso sem tocar na fábrica.
+    "kit":       ("proxy_neutral",  1.00, 0.0),
     "debug":     ("debug_magenta",  1.00, 0.0),
 }
+
+# Materiais que desenham os dois lados do triângulo. O kit vem do glTF com `doubleSided`
+# ligado (o Blender exporta assim quando o material não pede culling), e o material
+# compartilhado tem de reproduzir isso: com culling de face traseira, qualquer peça de
+# winding invertido simplesmente some — foi o que aconteceu com os proxies de LOD na fase
+# 4, e o defeito é invisível até alguém olhar de um ângulo específico.
+DOUBLE_SIDED_MATERIALS: tuple[str, ...] = ("kit",)
 
 # Materiais que emitem luz própria. Separados dos de cima porque têm um campo a mais, e
 # porque o que eles fazem é diferente: a energia de emissão é o **botão da noite**. Um
@@ -411,7 +425,7 @@ DAY_PERIODS: tuple[tuple[str, int], ...] = (
 KEY = {
     "W": 87, "A": 65, "S": 83, "D": 68, "E": 69,
     "SPACE": 32, "SHIFT": 4194325, "ESCAPE": 4194305, "TAB": 4194306,
-    "F12": 4194343,
+    "F3": 4194334, "F12": 4194343,
     # Dígitos da fileira de cima: são os números das escolhas de diálogo.
     "1": 49, "2": 50, "3": 51, "4": 52,
 }
@@ -436,6 +450,7 @@ INPUT_MAP: dict[str, dict] = {
     "camera_toggle_capture": {"keys": ["TAB"]},
     "camera_zoom_in":        {"mouse_buttons": ["WHEEL_UP"]},
     "camera_zoom_out":       {"mouse_buttons": ["WHEEL_DOWN"]},
+    "toggle_fps":            {"keys": ["F3"]},
     "debug_screenshot":      {"keys": ["F12"]},
     # Escolhas de diálogo: números 1 a 4, e o D-pad no gamepad. Quatro porque
     # DIALOGUE_MAX_CHOICES é quatro — acrescentar uma quinta escolha exigiria uma ação
@@ -1036,6 +1051,26 @@ BENCH_ROUTE_SECONDS = 14.0               # duração de uma volta completa
 BENCH_CAMERA_CLEARANCE = 2.4             # m acima do relevo em que a câmera do bench voa
 BENCH_LOW_PERCENTILE = 1.0               # "1% low": pior 1% dos frames
 
+# Estações: três câmeras paradas, uma por situação que o orçamento trata de forma
+# diferente. A rota mede o passeio; as estações medem o pior caso de cada regime, que é o
+# que se otimiza. Uma média de rota esconde exatamente o quadro que dói.
+#
+# Campos: (nome, marcador, distância em m, altura em m, pitch em graus, giro em graus,
+# lotar a praça). O giro é somado à direção que sai do marcador: 0 olha para ele, 180 olha
+# para o lado oposto — é assim que a estação do vale fica de costas para a cidade e mede
+# campo aberto de verdade, sem a cidade inteira no fundo inflando o número.
+BENCH_STATIONS: tuple[tuple[str, str, float, float, float, float, bool], ...] = (
+    ("vale",   "portao", 170.0,  0.0,  -4.0, 180.0, False),
+    ("portao", "portao",  19.0,  5.0, -10.0,   0.0, False),
+    ("praca",  "praca",   16.0,  4.0, -12.0,   0.0, True),
+)
+BENCH_STATION_SETTLE = 24        # quadros até o LOD assentar e o shader compilar
+BENCH_STATION_FRAMES = 90        # quadros medidos por estação
+# Raio em que os habitantes se reúnem na estação da praça. Lotar é por construção e não por
+# espera: a agenda junta onze pessoas no poço ao meio-dia, mas depender disso seria medir o
+# relógio. O que o critério pede é 20 NPCs à vista, e é isso que se põe à vista.
+BENCH_CROWD_RADIUS = 9.0
+
 # ---------------------------------------------------------------------------
 # Cidade
 # ---------------------------------------------------------------------------
@@ -1271,6 +1306,11 @@ NPC_LINES: dict[str, tuple[str, ...]] = {
 # distantes.
 NPC_SHADOW_RADIUS = 26.0        # m: além disto, o habitante não projeta sombra
 NPC_ACTIVE_RADIUS = 60.0        # m: além disto, simulação barata
+# Raio em que o habitante pensa a cada quadro de física. Além dele, o diretor o faz pensar
+# a cada NPC_FAR_STRIDE quadros com o tempo acumulado: o mesmo deslocamento em menos
+# passos. A 1,05 m/s, três quadros são 5 cm — não atravessa parede e não se vê.
+NPC_NEAR_RADIUS = 22.0
+NPC_FAR_STRIDE = 3
 NPC_ACTIVE_HYSTERESIS = 8.0     # m de folga para não piscar na fronteira
 NPC_DIRECTOR_HZ = 4.0           # vezes por segundo que o diretor reavalia quem é ativo
 NPC_ABSTRACT_SPEED = 1.9        # m/s do avanço abstrato — o mesmo passo, sem física
@@ -1952,6 +1992,109 @@ SOUNDSCAPE_SAMPLE_HZ = 30.0
 SOUNDSCAPE_MIN_TOTAL = 0.72
 SOUNDSCAPE_MAX_STEP = 0.08
 SOUNDSCAPE_CROSSFADE_TOLERANCE = 0.35   # s de folga na duração medida do crossfade
+
+# ---------------------------------------------------------------------------
+# Opções do jogador
+# ---------------------------------------------------------------------------
+# Presets de qualidade. Cada um é um conjunto de botões que o jogador não deveria ter de
+# entender um a um — "média" é o alvo do projeto e é onde os tetos do orçamento valem.
+#
+# Os três mexem no que de fato custa: MSAA, tamanho e alcance da sombra, número de
+# cascatas, densidade do espalhamento e alcance de LOD. Não mexem em nada que mude o que a
+# cena **é**: baixar a qualidade não apaga um prédio nem tira um habitante da praça.
+QUALITY_LEVELS: tuple[str, ...] = ("baixa", "media", "alta")
+QUALITY_DEFAULT = "media"
+QUALITY_PRESETS: dict[str, dict] = {
+    "baixa": {
+        "msaa": 0, "shadow_size": 2048, "shadow_distance": 70.0, "splits": "orthogonal",
+        "shadow_filter": 0, "scatter": 0.55, "lod_scale": 0.7, "debanding": False,
+        "occlusion": True, "particles": 0.4,
+    },
+    "media": {
+        "msaa": 1, "shadow_size": 4096, "shadow_distance": 120.0, "splits": "2_splits",
+        "shadow_filter": 3, "scatter": 1.0, "lod_scale": 1.0, "debanding": True,
+        "occlusion": True, "particles": 1.0,
+    },
+    "alta": {
+        "msaa": 2, "shadow_size": 4096, "shadow_distance": 180.0, "splits": "4_splits",
+        "shadow_filter": 4, "scatter": 1.0, "lod_scale": 1.4, "debanding": True,
+        "occlusion": True, "particles": 1.0,
+    },
+}
+# Distância de renderização, como fator sobre o alcance de fábrica. É separada da
+# qualidade porque é a opção que mais muda o custo num vale de 512 m, e quem tem máquina
+# fraca costuma querer sombra bonita perto e nada longe.
+RENDER_DISTANCE_MIN = 0.5
+RENDER_DISTANCE_MAX = 1.5
+RENDER_DISTANCE_DEFAULT = 1.0
+# Densidade de habitantes, como fator sobre `NPC_COUNT`. Aplicada na geração: mudar isto
+# com o jogo aberto exigiria criar ou apagar gente na frente do jogador.
+NPC_DENSITY_MIN = 0.25
+NPC_DENSITY_MAX = 1.0
+NPC_DENSITY_DEFAULT = 1.0
+VSYNC_DEFAULT = True
+
+# Volumes iniciais, em escala linear (0..1) — que é a escala que um slider espera.
+VOLUME_DEFAULTS: dict[str, float] = {
+    "Master": 0.9,
+    "Music": 0.7,
+    "SFX": 0.9,
+    "Ambience": 0.8,
+}
+
+# Tolerâncias da prova do MVP. Metro e minuto, não fração: o que se cobra é que o jogador
+# volte onde estava, e "onde estava" tem escala humana.
+MVP_POSITION_TOLERANCE = 0.5    # m entre o salvo e o restaurado
+MVP_HOUR_TOLERANCE = 0.02       # h — pouco mais de um minuto de jogo
+MVP_PAUSE_TOLERANCE = 0.001     # h de deriva do relógio durante a pausa (3,6 s de jogo)
+MVP_ROAD_TOLERANCE = 14.0       # m do acampamento até o leito da estrada
+# Quanto o corpo restaurado pode estar abaixo da **altura analítica** do relevo.
+#
+# Não é folga para erro: são duas representações da mesma superfície. `HeightField.height_at`
+# devolve a função suave; o jogador se apoia na malha de colisão, que é a mesma função
+# triangulada em células de 4 m — e a corda de uma curva fica alguns centímetros abaixo do
+# arco. Medido: 4 cm. Um metro acusaria o defeito de verdade, que é cair através do chão.
+MVP_GROUND_TOLERANCE = 0.25
+
+SETTINGS_PATH = "user://settings.json"
+SAVE_PATH = "user://save.json"
+SAVE_VERSION = 1
+
+# ---------------------------------------------------------------------------
+# Interface
+# ---------------------------------------------------------------------------
+
+UI_TITLE_FONT_SIZE = 64
+UI_FONT_SIZE = 22
+UI_SMALL_FONT_SIZE = 17
+UI_BUTTON_WIDTH = 340
+UI_BUTTON_HEIGHT = 46
+UI_MARGIN = 56
+UI_SPACING = 12
+UI_FADE_SECONDS = 0.35
+UI_PANEL_ALPHA = 0.86
+UI_SLIDER_WIDTH = 260
+# Contador de FPS: F3, canto superior esquerdo, atualizado quatro vezes por segundo.
+# Atualizar por quadro faria o contador piscar números ilegíveis e medir a si mesmo.
+FPS_REFRESH_HZ = 4.0
+FPS_FONT_SIZE = 16
+
+# ---------------------------------------------------------------------------
+# Abertura
+# ---------------------------------------------------------------------------
+# O jogador acorda num acampamento à beira da estrada e a cidade fica do outro lado. Não há
+# uma linha de tutorial: a estrada é a seta, a muralha é o destino, e a fogueira é o único
+# ponto quente do quadro na hora em que ele abre os olhos.
+OPENING_HOUR = 6.4              # amanhecer: a luz vem de trás da cidade
+OPENING_CAMP_ROAD_T = 0.62      # fração da estrada em que o acampamento fica
+OPENING_CAMP_OFFSET = 7.0       # m para o lado da estrada
+OPENING_CAMP_PROPS = 5          # barris, caixotes e sacos em volta da fogueira
+OPENING_CAMP_RADIUS = 3.2       # m do círculo do acampamento
+OPENING_FIRE_PARTICLES = 26
+OPENING_FIRE_HEIGHT = 0.9
+OPENING_FIRE_SCALE = 0.42
+OPENING_LOOK_SECONDS = 2.2      # s da câmera abrindo do chão até a linha do horizonte
+OPENING_LANTERN_SPACING = 26.0  # m entre as lanternas que marcam a estrada até o portão
 
 # ---------------------------------------------------------------------------
 # Geração

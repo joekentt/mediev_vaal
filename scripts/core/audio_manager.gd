@@ -228,15 +228,15 @@ func _zone_stream(zone_id: StringName) -> AudioStream:
 ##
 ## De quebra, tira a leitura de disco do meio da travessia: entrar na cidade não é o
 ## momento de descomprimir 20 s de áudio.
-func _cached(name: String) -> AudioStream:
-	if _streams.has(name):
-		return _streams[name]
-	var path: String = "%s/%s.wav" % [Params.AUDIO_DIR, name]
+func _cached(clip: String) -> AudioStream:
+	if _streams.has(clip):
+		return _streams[clip]
+	var path: String = "%s/%s.wav" % [Params.AUDIO_DIR, clip]
 	if not ResourceLoader.exists(path):
 		push_warning("Som ausente: %s. Rode `make audio`." % path)
 		return null
 	var stream: AudioStream = _looping(ResourceLoader.load(path) as AudioStream)
-	_streams[name] = stream
+	_streams[clip] = stream
 	return stream
 
 

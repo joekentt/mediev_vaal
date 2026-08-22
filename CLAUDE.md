@@ -47,7 +47,11 @@ Isso vale inclusive para o que normalmente se considera "configuração":
 | Toda malha | `generators/mesh_builder.gd` | `Params` |
 | `docs/assets.html` + renders | `tools/preview_assets.py` + `tools/contact_sheet.py` | manifesto do kit |
 | `docs/shots/*.png` | `tools/godot_shot.gd` | `Params.SHOT_POINTS` |
-| `docs/bench.json` + histórico | `tools/bench.gd` | `Params.BENCH_ROUTE` |
+| `docs/bench.json` + histórico | `tools/bench.gd` | `Params.BENCH_ROUTE` + `BENCH_STATIONS` |
+| Composição da cena por ramo | `tools/audit.gd` | `Params.BENCH_STATIONS` |
+| Menus, opções e contador de FPS | `scripts/ui/*.gd` | `Params.UI_*` |
+| `user://save.json` e `user://settings.json` | `scripts/core/save_game.gd`, `settings.gd` | estado vivo |
+| Acampamento da abertura e lanternas da estrada | `generators/opening_gen.gd` | `Params.OPENING_*` |
 | `docs/anim/*.png` | `tools/anim_preview.gd` | `Params.GAIT_PROFILES` |
 | `docs/player/controle.png` + medidas | `tools/playtest.gd` | `Params.PLAYER_*` |
 | `docs/valley/seeds.png` + medidas | `tools/valley.gd` | `Params.VALLEY_SEEDS` |
@@ -107,7 +111,9 @@ make population roda 3 min de praça e prova que a cidade tem vida (precisa do G
 make dialogue prova que conversar não quebra a rotina do habitante (precisa do Godot)
 make daynight acelera o dia e prova que a cor não salta      (precisa do Godot)
 make soundscape prova que entrar na cidade não corta o som   (precisa do Godot)
-make bench    percorre a rota fixa e acumula docs/bench_history.csv
+make audit    mostra de que a cena é feita em cada estação  (precisa do Godot)
+make mvp      salva, recarrega noutro processo e prova que a partida volta
+make bench    percorre a rota fixa, mede 3 estações e acumula docs/bench_history.csv
 make clean    apaga o derivado
 make regen    clean + all — prova de reprodutibilidade
 ```
@@ -554,6 +560,88 @@ chega ao fim. O interior é medido contra a caixa dos prédios que **têm** inte
 verdade: os outros são fachada com carta escura atrás da janela, e abafar o som ao encostar
 neles seria abafar por causa de um cômodo que não existe.
 
+
+### A auditoria
+
+O bench sempre disse **quanto** custa. `make audit` diz **de quê**: quantos nós de desenho
+cada ramo do estágio põe em cada estação, e quantos materiais distintos existem em cena.
+Ele roda sem renderizador, porque a pergunta é geométrica — tronco de visão contra caixa
+envolvente —, e por isso o número é um teto: o driver desenha aquilo ou menos.
+
+Duas coisas que só apareceram porque alguém foi contar:
+
+- **Havia quarenta materiais distintos, para um teto de dezesseis.** `meshlib.flat_material`
+  cria um material só para o kit inteiro, e a intenção não sobreviveu ao formato de arquivo:
+  cada peça é exportada no **seu** `.glb`, e o Godot importa um recurso de material por
+  arquivo — 28 cópias idênticas de `kit_flat` e 5 de `character_flat`. Nada media isso,
+  porque `Metrics` conta o cache do `MaterialLibrary` e não enxerga o que vem dentro das
+  malhas. Um `material_override` compartilhado na instanciação levou 40 a 8.
+- **A caixa envolvente de um `MultiMesh` chega vazia.** O Godot mantém os limites do lado
+  do servidor de renderização e devolve uma caixa de tamanho zero para quem os pergunta —
+  então a cidade inteira lia como um ponto na origem, o que apaga a distância que
+  `visibility_range` mede e a que o culling usa. `CityBuilder` agora escreve `custom_aabb`
+  a partir das posições que acabou de gravar.
+
+E uma que a auditoria **não** justificou: dividir os `MultiMesh` de props por quarteirão,
+como o espalhamento faz por bloco. Faria sentido se o custo estivesse em prop distante, e
+não está: no pior enquadramento, a praça lotada, tudo está perto — e a divisão aumentaria
+o número de nós exatamente ali. Otimização sem número que a peça é otimização que se paga
+noutro lugar.
+
+O que a medição justificou e foi feito: os materiais acima, os limites acima, e o **tique
+de física escalonado** — habitante além de `NPC_NEAR_RADIUS` pensa a cada `NPC_FAR_STRIDE`
+quadros com o tempo acumulado, andando a mesma distância em menos passos. A 1 m/s, três
+quadros são cinco centímetros: não atravessa parede e não se vê.
+
+**Baking de luz ficou de fora, e não por esquecimento.** `LightmapGI` exige UV2 e um passe
+de bake sobre malhas que existem em disco; aqui a geometria nasce em runtime, de um número,
+e um vale diferente por seed não tem lightmap para assar. O ganho equivalente foi tomado
+onde ele existe neste projeto: duas cascatas em vez de quatro, sombra de habitante cortada
+por raio e por contagem, e lampião sem sombra.
+
+### O MVP
+
+Menu, carregamento, pausa, opções e save — tudo construído em código, como o resto.
+
+- **A pausa congela o relógio do mundo.** `TimeSystem` e `DayNightCycle` são
+  `PROCESS_MODE_PAUSABLE`, então param junto com o jogo e voltam na mesma hora: quem abre o
+  menu por três minutos não volta com o sol noutro lugar. A tela de pausa é
+  `PROCESS_MODE_ALWAYS` — senão ela se pausaria a si mesma e não haveria como despausar.
+- **O save guarda a semente, nunca o mundo.** Seed, posição, hora, flags e reputação num
+  JSON legível. Um vale de 512 m com cidade e vinte habitantes sai de um número e de
+  `params.py`; serializá-lo seria gravar em disco o que o gerador produz de graça. A seed é
+  aplicada **antes** de o mundo nascer, porque restaurar posição num vale gerado com outra
+  seed põe o jogador dentro de uma montanha.
+- **As opções valem na hora, menos uma.** Qualidade, distância, sensibilidade, volumes e
+  V-Sync aplicam-se no controle que muda; densidade de habitantes vale na próxima geração,
+  e a própria linha diz isso. Nenhuma delas muda o que a cena **é**: baixar a qualidade não
+  apaga um prédio nem tira alguém da praça.
+- **`Settings` é o único arquivo que mexe no motor.** Espalhar `RenderingServer` por três
+  menus é como um projeto perde o controle de quanto custa a própria imagem. E o corte de
+  vegetação é aplicado **só ao ramo do espalhamento**: `visible_instance_count` corta
+  instâncias de qualquer `MultiMesh`, e a cidade é feita deles — aplicado ao estágio todo,
+  baixar a qualidade apagaria metade das paredes.
+
+### A abertura
+
+O jogador acorda deitado ao lado de uma fogueira, às 6h24, e a câmera abre do chão até a
+linha do horizonte. Não há uma palavra de tutorial, e a condução é composição:
+
+1. **A fogueira é o único ponto quente do quadro.** Na paleta fria do amanhecer, um
+   `OmniLight3D` laranja a dois metros do rosto é para onde o olho vai — e é onde o jogador
+   está.
+2. **A estrada é a única linha reta do vale.** Relevo, vegetação e rochas são ruído; uma
+   faixa de terra batida atravessando tudo lê como caminho antes de qualquer legenda.
+3. **O portão é o único ponto aceso ao longe.** Àquela hora as janelas e os lampiões da
+   cidade ainda estão acesos, porque a fase 5 os acende abaixo de `DAY_CYCLE_LIGHT_ON`. As
+   lanternas que a abertura planta ao longo da estrada são a linha pontilhada entre os dois
+   — e só do acampamento para a frente: atrás dele a estrada fica escura, que é a forma mais
+   antiga de dizer "não é por aí".
+
+O acampamento nasce **em cima da estrada gerada**, e não numa coordenada fixa: a estrada
+muda com a seed, e um ponto absoluto acabaria numa encosta na segunda seed. `make mvp` mede
+isso — a distância do acampamento ao leito e ao portão.
+
 ---
 
 ## Estrutura
@@ -596,6 +684,8 @@ neles seria abafar por causa de um cômodo que não existe.
   dialogue.gd       conversa com um habitante em rotina e mede a retomada (Godot)
   dialogue.py       roda dialogue.gd e cobra os critérios de aceite da conversa
   bench.py          roda bench.gd e traduz falha de ambiente
+  audit.gd/.py      de que a cena é feita em cada estação, e quantos materiais distintos
+  mvp.gd/.py        salva num processo, carrega noutro, e cobra que a partida volte
 /generators         geração em GDScript (runtime)
   mesh_builder.gd   ArrayMesh flat + vertex color; valida orçamento de tris
   material_library.gd  materiais compartilhados, um por nome
@@ -612,6 +702,9 @@ neles seria abafar por causa de um cômodo que não existe.
 /scenes             cenas — quase vazias por construção
 /scripts
   core/             autoloads, Params gerado, métricas, harness de medição
+    save_game.gd      salvar e carregar: seed, posição, hora, flags e reputação em JSON
+    settings.gd       as opções do jogador: ler, escrever e aplicar no motor
+    main.gd           a ordem das coisas: menu, carregamento, mundo, abertura
   gameplay/         regras de jogo
     procedural_locomotion.gd  marcha, corrida, salto e camadas aditivas por IK
     two_bone_ik.gd            solver analítico de duas juntas
@@ -635,8 +728,14 @@ neles seria abafar por causa de um cômodo que não existe.
     soundscape.gd             que zona sonora é esta, e que tema toca nela
   ai/               comportamento de NPC
   ui/               telas e widgets, construídos em código
+    ui_kit.gd                 um botão, um slider, um título — e todos os números de params
     context_prompt.gd         a linha do rodapé que aparece e some
     dialogue_screen.gd        painel, fala revelada e escolhas
+    main_menu.gd              continuar, novo vale, opções, sair
+    pause_screen.gd           a pausa que congela o relógio do mundo
+    options_screen.gd         qualidade, distância, densidade, volumes, V-Sync
+    loading_screen.gd         a cortina que sobe antes do quadro que trava
+    fps_counter.gd            F3: quadros, pior quadro, draw calls e triângulos
 /resources          dados de design gerados (raças, diálogos, itens), versionados
   gaits/            perfis de marcha por postura (gerado, versionado)
   schedules/        agendas diárias por arquétipo (gerado, versionado)
@@ -754,7 +853,7 @@ Tetos, não metas. `make bench` reprova quem estourar.
 | Draw calls na cidade | 240 |
 | Draw calls em campo aberto | 150 |
 | NPCs ativos simultâneos | 40 |
-| Materiais únicos visíveis | 16 |
+| Materiais únicos visíveis | 16 (medido por `make audit`) |
 | Triângulos visíveis | 150 000 |
 | Frame time | 16,6 ms @ 1080p |
 | Luzes com sombra | 1 direcional + 4 pontuais |
@@ -765,7 +864,10 @@ Cada categoria de malha tem também um teto de triângulos (`Params.TRI_BUDGET`)
 
 Como o orçamento é mantido:
 
-- Reuso de material acima de tudo. Cor por vertex color, nunca por material novo.
+- Reuso de material acima de tudo. Cor por vertex color, nunca por material novo. **E o
+  reuso tem de sobreviver ao formato de arquivo**: cada peça do kit vem no seu próprio
+  `.glb` e o Godot importa um material por arquivo, então quem instancia aplica o material
+  compartilhado por cima. Sem isso eram 40 materiais distintos em cena para um teto de 16.
 - `MultiMeshInstance3D` para tudo que se repete: vegetação, cercas, telhados, pedras.
 - Malhas da cidade agrupadas por quadra, não um nó por tijolo.
 - Occlusion culling ligado; prédios grandes são occluders.
@@ -808,6 +910,7 @@ Camadas de física (nomeadas em `params.PHYSICS_LAYERS`, acessíveis por `Params
 | `dialogue_choice_1` … `dialogue_choice_4` | 1 / 2 / 3 / 4 | Direcional |
 | `camera_toggle_capture` | Tab | — |
 | `camera_zoom_in` / `camera_zoom_out` | Roda do mouse | — |
+| `toggle_fps` | F3 | — |
 | `debug_screenshot` | F12 | — |
 
 A rotação de câmera pelo mouse **não é uma ação**: é `InputEventMouseMotion` lido pelo
@@ -910,10 +1013,17 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
     `make soundscape` mede. *A ambiência é por zona, não por bioma: bioma é assunto da
     fase que trouxer água e vegetação por região.*
 
-13. **Itens, combate e fechamento**
-    Itens e equipamento gerados, combate corpo a corpo e à distância, IA hostil,
-    salvamento/carregamento, passe de perfilamento contra todo o orçamento, build de
-    release.
+13. **Itens, combate e fechamento** — *parcial*
+    Feito nesta etapa: **auditoria e MVP**. `make audit` mostra de que a cena é feita em
+    cada estação e cobra o teto de materiais únicos (que estava estourado em 40 e voltou a
+    8); `make bench` passou a medir três estações paradas — vale, portão e praça lotada —
+    além da rota. Save/load em JSON com seed, posição, hora, flags e reputação, provado em
+    **dois processos** por `make mvp`. Menu principal, tela de carregamento, pausa que
+    congela o relógio, opções (qualidade, distância, densidade, sensibilidade, volumes,
+    V-Sync) e contador de FPS em F3. Abertura sem tutorial escrito: acampamento à beira da
+    estrada, lanternas até o portão, praça no fim.
+    *Falta: itens e equipamento, combate corpo a corpo e à distância, IA hostil e build de
+    release.*
 
 ---
 
@@ -922,7 +1032,7 @@ Uma fase por vez. Nada de adiantar trabalho da fase seguinte.
 **Nenhuma fase está concluída sem `make preview` e `make bench` rodados, com os números
 colados no commit** — mais o alvo de medição que a fase tenha criado (`make anim`,
 `make playtest`, `make valley`, `make city`, `make population`, `make dialogue`,
-`make daynight`, `make soundscape`). Não é
+`make daynight`, `make soundscape`, `make audit`, `make mvp`). Não é
 cerimônia. Um gerador não tem como saber se o que ele produziu
 parece certo, e uma contagem de triângulos dentro do orçamento não impede uma árvore de
 sair torta ou um chão de sumir por winding invertido — as duas coisas já aconteceram
@@ -1021,8 +1131,34 @@ a diferença de draw calls entre elas ser nuvem — sem que ninguém saiba disso
 Nove da manhã porque é a primeira hora do dia com a névoa no fator 1,0, que é a névoa sob
 a qual as fases 2 a 11 foram calibradas.
 
+`make audit` responde "de que a cena é feita?":
+
+- quantos nós de desenho cada ramo do estágio põe em cada estação — cidade, terreno,
+  vegetação, ambiente e habitantes —, que é como se decide **o que** mexer: o ramo é o
+  gerador;
+- quantos materiais **distintos** existem em cena, contando o que vem dentro dos `.glb` e
+  não só o `material_override`. Foi assim que 40 materiais para um teto de 16 apareceram, e
+  é o único teto do orçamento que nenhuma outra medição enxerga.
+
+`make mvp` responde "a partida volta?":
+
+- em **dois processos**: um gera o mundo, anda, salva e morre; o outro abre o save do zero.
+  Entre eles morrem a árvore, os autoloads e as estáticas do `WorldGenerator`, e o que
+  atravessa é o JSON — que é o que o jogador tem quando fecha o jogo;
+- a seed do mundo recarregado contra a seed salva, a posição contra a salva **e contra o
+  relevo** (voltar dentro do chão é o defeito clássico), a hora, as flags e a reputação;
+- a deriva do relógio durante uma pausa de sessenta quadros, que é "a pausa não quebra o
+  TimeSystem" em número;
+- onde a abertura acampou: a distância até o leito da estrada e até o portão, e quantas
+  lanternas marcaram o caminho.
+
 `make bench` responde "cabe?":
 
+- **três estações paradas** — vale, portão e praça lotada —, cada uma contra o teto do seu
+  regime. A rota mede o passeio; as estações medem o pior caso de cada regime, que é o que
+  se otimiza, e uma média de rota dilui exatamente o quadro que dói. A praça é lotada **por
+  construção**: os vinte habitantes são reunidos nela antes de medir, porque depender da
+  agenda juntá-los seria medir o relógio;
 - FPS médio **e 1% low** — a média esconde engasgo, o 1% low é o que o jogador sente;
 - draw calls e triângulos (pico) contra os tetos;
 - frame time médio e pior frame;

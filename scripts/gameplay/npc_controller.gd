@@ -299,10 +299,37 @@ func _reachable(point: Vector3) -> Vector3:
 # --- Passo --------------------------------------------------------------------
 
 
+## Passo de física: um quadro de cada `_stride`, com o tempo acumulado.
+##
+## Vinte habitantes pensando a 60 Hz custam vinte consultas de navegação, vinte
+## `move_and_slide` e vinte olhares por quadro para uma cena em que metade deles está a
+## trinta metros. O diretor decide quem está longe; aqui só se acumula o tempo e se dá um
+## passo maior quando a vez chega. É o mesmo deslocamento em menos passos.
 func _physics_process(delta: float) -> void:
 	if not _active or not _paused.is_empty():
 		return
 
+	_carry += delta
+	_countdown -= 1
+	if _countdown > 0:
+		return
+	_countdown = maxi(_stride, 1)
+	_step(_carry)
+	_carry = 0.0
+
+
+var _stride: int = 1
+var _countdown: int = 1
+var _carry: float = 0.0
+
+
+## Quantos quadros de física por passo. 1 é pensar a cada quadro.
+func set_stride(frames: int) -> void:
+	_stride = maxi(frames, 1)
+	_countdown = mini(_countdown, _stride)
+
+
+func _step(delta: float) -> void:
 	_speak_cooldown = maxf(_speak_cooldown - delta, 0.0)
 	_tick_look(delta)
 

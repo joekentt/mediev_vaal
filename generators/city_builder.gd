@@ -55,7 +55,7 @@ static func build(
 	var lanterns: Array[Vector3] = _build_props(layout, field, pool, rng)
 	_build_markers(layout, root)
 
-	var instances: int = _flush(pool, root)
+	var instances: int = flush_into(pool, root)
 	_build_cards(cards, root)
 	_build_occluders(wall_boxes + building_boxes, root)
 	var night: Dictionary = _build_night_lights(lanterns, layout, root)
@@ -183,7 +183,11 @@ static func place(
 
 
 ## Fecha os lotes de instâncias em `MultiMeshInstance3D`, um por peça.
-static func _flush(pool: Dictionary, root: Node3D) -> int:
+##
+## Público porque a abertura monta o acampamento com as mesmas peças e pelas mesmas regras:
+## um `MultiMesh` por peça, limites explícitos e o material compartilhado do kit. Duplicar
+## isso lá seria duplicar as três decisões que este arquivo existe para concentrar.
+static func flush_into(pool: Dictionary, root: Node3D) -> int:
 	var total: int = 0
 	var parts: Array = pool.keys()
 	parts.sort()  # ordem estável: a árvore de cena tem de sair igual em duas execuções
@@ -200,13 +204,28 @@ static func _flush(pool: Dictionary, root: Node3D) -> int:
 		multi.use_colors = true
 		multi.mesh = mesh
 		multi.instance_count = entries.size()
+		var bounds: AABB = AABB(entries[0]["transform"].origin, Vector3.ZERO)
 		for index: int in entries.size():
-			multi.set_instance_transform(index, entries[index]["transform"])
+			var placement: Transform3D = entries[index]["transform"]
+			multi.set_instance_transform(index, placement)
 			multi.set_instance_color(index, entries[index]["tint"])
+			bounds = bounds.expand(placement.origin)
 
 		var node: MultiMeshInstance3D = MultiMeshInstance3D.new()
 		node.name = String(part)
 		node.multimesh = multi
+		# Limites explícitos, e não os que o Godot calcularia sozinho: a caixa de um
+		# `MultiMesh` vive do lado do servidor de renderização e o recurso devolve uma caixa
+		# **vazia** para quem a pergunta. Toda a cidade lia como um ponto na origem — o que
+		# apaga a distância que `visibility_range` mede e a que o culling usa. A caixa sai
+		# das mesmas posições que acabaram de ser escritas, crescida pelo tamanho da peça.
+		node.custom_aabb = bounds.grow(mesh.get_aabb().size.length())
+		# Um material para o kit inteiro. Cada peça chega no seu próprio `.glb` e o Godot
+		# importa um material por arquivo — 28 recursos idênticos, medidos pela auditoria,
+		# contra um teto de 16 materiais únicos. O override desfaz isso sem tocar na
+		# fábrica: os materiais do kit são todos brancos com vertex color, então o
+		# compartilhado desenha exatamente a mesma coisa.
+		node.material_override = MaterialLibrary.get_material(Params.KIT_MATERIAL)
 		root.add_child(node)
 		total += entries.size()
 	return total

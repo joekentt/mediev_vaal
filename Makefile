@@ -15,7 +15,7 @@ GODOT ?= godot
 BLENDER ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all params project materials dialogues daycycle gaits player assets test-assets characters audio world verify warnings preview anim playtest valley city population dialogue daynight soundscape bench clean regen help
+.PHONY: all params project materials dialogues daycycle gaits player assets test-assets characters audio world verify warnings preview anim playtest valley city population dialogue daynight soundscape audit mvp bench clean regen help
 
 ## Agendas diárias dos arquétipos em resources/schedules/.
 schedules:
@@ -157,6 +157,16 @@ soundscape:
 	@echo "== soundscape =="
 	@GODOT=$(GODOT) $(PY) -m tools.soundscape
 
+## Salva num processo, carrega noutro, e prova que a partida volta inteira.
+mvp:
+	@echo "== mvp =="
+	@GODOT=$(GODOT) $(PY) -m tools.mvp
+
+## De que a cena é feita em cada estação: nós de desenho por ramo do estágio.
+audit:
+	@echo "== audit =="
+	@GODOT=$(GODOT) $(PY) -m tools.audit
+
 ## Percorre a rota fixa, mede, e acrescenta uma linha a docs/bench_history.csv.
 ## Precisa do Godot com display.
 bench:
@@ -200,6 +210,8 @@ help:
 	@echo "  make valley   compara dois vales por seed (precisa do Godot)"
 	@echo "  make daynight prova que acelerar o tempo não dá salto de cor (precisa do Godot)"
 	@echo "  make soundscape prova que o som da cidade entra sem corte (precisa do Godot)"
+	@echo "  make audit    mostra de que a cena é feita em cada estação"
+	@echo "  make mvp      salva, recarrega noutro processo e prova que a partida volta"
 	@echo "  make bench    mede a rota fixa e acumula docs/bench_history.csv"
 	@echo "  make clean    apaga o derivado"
 	@echo "  make regen    clean + all"
