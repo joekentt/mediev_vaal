@@ -333,6 +333,10 @@ const MOUSE_SENSITIVITY_MAX: float = 1
 
 # --- Opções do jogador -------------------------------------------------------
 
+## Fases de uma sessão. Ficam aqui, e não no autoload, porque script de ferramenta não
+## enxerga identificador de autoload — ver o comentário em `tools/params.py`.
+enum Phase { BOOT, MAIN_MENU, GENERATING, PLAYING, PAUSED, CUTSCENE }
+
 const QUALITY_LEVELS: Array[StringName] = [&"baixa", &"media", &"alta"]
 const QUALITY_DEFAULT: StringName = &"media"
 

@@ -6,14 +6,8 @@ extends Node
 ## flags de mundo. Nada de regra de gameplay aqui. Toda mudança relevante é anunciada
 ## pelo `EventBus`; ninguém consulta o `GameState` em `_process`.
 
-enum Phase {
-	BOOT, ## Autoloads subindo, nada gerado ainda.
-	MAIN_MENU, ## Menu inicial.
-	GENERATING, ## Mundo sendo construído por `generators/`.
-	PLAYING, ## Jogo em andamento.
-	PAUSED, ## Pausado pelo jogador.
-	CUTSCENE, ## Controle tomado por uma cena roteirizada.
-}
+## As fases vivem em `Params.Phase`, e não aqui, porque script de ferramenta não enxerga
+## identificador de autoload: a prova do MVP precisa comparar fases de fora do jogo.
 
 ## Sensibilidade do mouse para a câmera, em graus por pixel.
 var mouse_sensitivity: float = Params.MOUSE_SENSITIVITY
@@ -21,7 +15,7 @@ var mouse_sensitivity: float = Params.MOUSE_SENSITIVITY
 ## Inverte o eixo vertical da câmera.
 var invert_camera_y: bool = false
 
-var _phase: int = Phase.BOOT
+var _phase: int = Params.Phase.BOOT
 var _is_paused: bool = false
 var _world_flags: Dictionary = {}
 var _reputation: Dictionary = {}
@@ -76,7 +70,7 @@ func set_paused(value: bool) -> void:
 		return
 	_is_paused = value
 	get_tree().paused = value
-	set_phase(Phase.PAUSED if value else Phase.PLAYING)
+	set_phase(Params.Phase.PAUSED if value else Params.Phase.PLAYING)
 	EventBus.game_paused_changed.emit(_is_paused)
 
 

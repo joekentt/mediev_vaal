@@ -37,7 +37,7 @@ func _ready() -> void:
 	Settings.apply_global(GameState)
 	_build_screens()
 
-	GameState.set_phase(GameState.Phase.MAIN_MENU)
+	GameState.set_phase(Params.Phase.MAIN_MENU)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_menu.open()
 
@@ -83,7 +83,7 @@ func _start(from_save: bool) -> void:
 	for _frame: int in CURTAIN_FRAMES:
 		await get_tree().process_frame
 
-	GameState.set_phase(GameState.Phase.GENERATING)
+	GameState.set_phase(Params.Phase.GENERATING)
 	if save.is_empty():
 		WorldGenerator.clear_seed_override()
 		GameState.clear_flags()
@@ -110,7 +110,7 @@ func _start(from_save: bool) -> void:
 		SaveGame.restore(save, player)
 
 	_pause.process_mode = Node.PROCESS_MODE_ALWAYS
-	GameState.set_phase(GameState.Phase.PLAYING)
+	GameState.set_phase(Params.Phase.PLAYING)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_loading.close()
 
@@ -143,7 +143,7 @@ func _to_menu() -> void:
 		_stage.queue_free()
 		_stage = null
 	_options.bind(null)
-	GameState.set_phase(GameState.Phase.MAIN_MENU)
+	GameState.set_phase(Params.Phase.MAIN_MENU)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_menu.open()
 
@@ -152,7 +152,7 @@ func _on_options_closed() -> void:
 	# As opções são chamadas de dois lugares e voltam para quem as chamou: do menu, para o
 	# menu; da pausa, para a pausa. Sem isto, fechar as opções durante o jogo devolveria o
 	# controle com a pausa ainda ligada e o mouse solto.
-	if GameState.get_phase() == GameState.Phase.MAIN_MENU:
+	if GameState.get_phase() == Params.Phase.MAIN_MENU:
 		_menu.open()
 
 

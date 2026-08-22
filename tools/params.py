@@ -2056,6 +2056,19 @@ MVP_ROAD_TOLERANCE = 14.0       # m do acampamento até o leito da estrada
 # arco. Medido: 4 cm. Um metro acusaria o defeito de verdade, que é cair através do chão.
 MVP_GROUND_TOLERANCE = 0.25
 
+# Fases do jogo, na ordem em que uma sessão as percorre. Aqui e não no autoload porque
+# identificador de autoload não existe quando um script de ferramenta compila — a fase 10
+# já pagou esse preço com `EventBus`, e a prova do MVP o pagou de novo ao comparar contra
+# `GameState.Phase`. Em `Params`, os dois lados leem a mesma tabela.
+GAME_PHASES: tuple[str, ...] = (
+    "BOOT",        # autoloads subindo, nada gerado ainda
+    "MAIN_MENU",   # menu inicial
+    "GENERATING",  # mundo sendo construído por generators/
+    "PLAYING",     # jogo em andamento
+    "PAUSED",      # pausado pelo jogador
+    "CUTSCENE",    # controle tomado por uma cena roteirizada
+)
+
 SETTINGS_PATH = "user://settings.json"
 SAVE_PATH = "user://save.json"
 SAVE_VERSION = 1

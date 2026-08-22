@@ -5,10 +5,16 @@
 ## O critério de aceite da fase é uma frase — "salvar, fechar, reabrir e continuar
 ## funciona" — e ela só é verificável de um jeito: **em dois processos**. Salvar e carregar
 ## na mesma sessão prova pouco, porque o mundo já está na memória e a seed já está aplicada.
-## Por isso este script tem dois modos:
+## Por isso este script tem três modos:
 ##
+##     --script res://tools/mvp.gd -- fluxo      abre a cena principal e joga por ela
 ##     --script res://tools/mvp.gd -- salvar     gera um mundo, anda, salva, imprime o estado
 ##     --script res://tools/mvp.gd -- carregar   abre o save num processo novo e compara
+##
+## Nenhum deles cita um identificador de autoload. `GameState` e `TimeSystem` são resolvidos
+## por `/root/...` e as fases vêm de `Params.Phase`: identificador de autoload não existe
+## quando `--script` compila, e citá-lo derruba a compilação do arquivo inteiro — foi o que
+## aconteceu na primeira versão deste modo de fluxo.
 ##
 ## Entre os dois, tudo morre: a árvore de cena, os autoloads, o `WorldGenerator` e as suas
 ## variáveis estáticas. O que atravessa é o arquivo JSON, que é exatamente o que o jogador
@@ -164,13 +170,13 @@ func _flow_side() -> void:
 	var pause: PauseScreen = main.get_node_or_null(^"Pause") as PauseScreen
 	var options: OptionsScreen = main.get_node_or_null(^"Options") as OptionsScreen
 	var fps: FPSCounter = main.get_node_or_null(^"FPS") as FPSCounter
-	var at_menu: bool = _state.get_phase() == GameState.Phase.MAIN_MENU
+	var at_menu: bool = _state.get_phase() == Params.Phase.MAIN_MENU
 
 	# "Novo vale", pelo sinal que o botão emite. Clicar num `Button` sem renderizador não é
 	# possível; emitir o sinal dele percorre exatamente o mesmo código.
 	menu.start_requested.emit(false)
 	var waited: int = 0
-	while _state.get_phase() != GameState.Phase.PLAYING and waited < FLOW_TIMEOUT_FRAMES:
+	while _state.get_phase() != Params.Phase.PLAYING and waited < FLOW_TIMEOUT_FRAMES:
 		await process_frame
 		waited += 1
 
@@ -192,7 +198,7 @@ func _flow_side() -> void:
 	print(RESULT_PREFIX + JSON.stringify({
 		"mode": MODE_FLOW,
 		"started_at_menu": at_menu,
-		"reached_playing": _state.get_phase() == GameState.Phase.PLAYING,
+		"reached_playing": _state.get_phase() == Params.Phase.PLAYING,
 		"frames_to_world": waited,
 		"has_stage": stage != null,
 		"has_player": player != null,

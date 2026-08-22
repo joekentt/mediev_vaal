@@ -14,7 +14,7 @@ extends Node
 
 # --- Ciclo de jogo -----------------------------------------------------------
 
-## A fase do jogo mudou (ver `GameState.Phase`).
+## A fase do jogo mudou (ver `Params.Phase`).
 @warning_ignore("unused_signal")
 signal game_phase_changed(phase: int)
 

@@ -507,6 +507,10 @@ const MOUSE_SENSITIVITY_MAX: float = {P.num(P.MOUSE_SENSITIVITY_MAX)}
 
 # --- Opções do jogador -------------------------------------------------------
 
+## Fases de uma sessão. Ficam aqui, e não no autoload, porque script de ferramenta não
+## enxerga identificador de autoload — ver o comentário em `tools/params.py`.
+enum Phase {{ {", ".join(P.GAME_PHASES)} }}
+
 const QUALITY_LEVELS: Array[StringName] = [{_names(P.QUALITY_LEVELS)}]
 const QUALITY_DEFAULT: StringName = &"{P.QUALITY_DEFAULT}"
 
