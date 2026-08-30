@@ -57,7 +57,24 @@ const PALETTE: Dictionary = {
 	&"sky_horizon":     Color(0.788235, 0.721569, 0.580392, 1),
 	&"sun":             Color(1.0, 0.941176, 0.854902, 1),
 	&"fog":             Color(0.729412, 0.686275, 0.584314, 1),
+	&"sky_night":       Color(0.066667, 0.109804, 0.2, 1),
+	&"sky_night_low":   Color(0.117647, 0.164706, 0.258824, 1),
+	&"sky_dawn":        Color(0.243137, 0.360784, 0.509804, 1),
+	&"sky_dawn_low":    Color(0.815686, 0.541176, 0.368627, 1),
+	&"sky_dusk":        Color(0.227451, 0.305882, 0.478431, 1),
+	&"sky_dusk_low":    Color(0.768627, 0.443137, 0.247059, 1),
+	&"sun_dawn":        Color(1.0, 0.768627, 0.541176, 1),
+	&"sun_dusk":        Color(1.0, 0.619608, 0.388235, 1),
+	&"moon":            Color(0.560784, 0.65098, 0.788235, 1),
+	&"fog_night":       Color(0.101961, 0.141176, 0.219608, 1),
+	&"fog_dawn":        Color(0.603922, 0.541176, 0.521569, 1),
+	&"fog_dusk":        Color(0.556863, 0.431373, 0.352941, 1),
+	&"window_light":    Color(1.0, 0.713725, 0.360784, 1),
+	&"overcast":        Color(0.556863, 0.580392, 0.627451, 1),
+	&"overcast_low":    Color(0.662745, 0.666667, 0.65098, 1),
+	&"rain":            Color(0.623529, 0.705882, 0.768627, 1),
 	&"ground_default":  Color(0.470588, 0.454902, 0.415686, 1),
+	&"proxy_neutral":   Color(1.0, 1.0, 1.0, 1),
 	&"debug_magenta":   Color(1.0, 0.0, 0.666667, 1),
 }
 
@@ -73,8 +90,19 @@ const MATERIALS: Dictionary = {
 	&"cloth":    {"color": &"cloth_cream", "roughness": 0.95, "metallic": 0},
 	&"water":    {"color": &"water", "roughness": 0.15, "metallic": 0},
 	&"ground":   {"color": &"ground_default", "roughness": 0.95, "metallic": 0},
+	&"kit":      {"color": &"proxy_neutral", "roughness": 1, "metallic": 0},
 	&"debug":    {"color": &"debug_magenta", "roughness": 1, "metallic": 0},
 }
+
+## Materiais que emitem luz. A energia é o teto: quem acende é o ciclo do dia, que
+## multiplica isto pela escuridão da hora.
+const GLOW_MATERIAL: StringName = &"glow"
+const GLOW_ENERGY: float = 2.4
+const RAIN_MATERIAL: StringName = &"rain"
+## Material branco compartilhado por toda malha que vem do kit ou dos corpos. Ver o
+## comentário de `MATERIALS["kit"]` em `tools/params.py`.
+const KIT_MATERIAL: StringName = &"kit"
+const RAIN_ENERGY: float = 0.4
 
 # --- Escala do mundo ---------------------------------------------------------
 
@@ -87,6 +115,7 @@ const FLOOR_HEIGHT: float = 3.5
 const DOOR_WIDTH: float = 1.2
 const DOOR_HEIGHT: float = 2.2
 const STREET_WIDTH: float = 6
+const WALL_THICKNESS: float = 0.25
 
 # --- Estágio (cena vazia da fase 1) ------------------------------------------
 
@@ -110,8 +139,8 @@ const FRAME_BUDGET_MS: float = 16.6
 
 ## Tetos de cena. Não são metas: são o limite que reprova a fase.
 const BUDGET: Dictionary = {
-	&"draw_calls_city":        200,
-	&"draw_calls_wilderness":  140,
+	&"draw_calls_city":        240,
+	&"draw_calls_wilderness":  150,
 	&"active_npcs":            40,
 	&"unique_materials":       16,
 	&"visible_tris":           150000,
@@ -123,7 +152,7 @@ const BUDGET: Dictionary = {
 
 ## Teto de triângulos por categoria de malha gerada.
 const TRI_BUDGET: Dictionary = {
-	&"terrain_chunk":     900,
+	&"terrain_chunk":     2100,
 	&"building_small":    300,
 	&"building_large":    900,
 	&"city_block":        4000,
@@ -140,10 +169,12 @@ const TRI_BUDGET: Dictionary = {
 # --- Render ------------------------------------------------------------------
 
 const SHADOW_MAX_DISTANCE: float = 120
-const FOG_DENSITY: float = 0.004
+const PHYSICS_TICKS_PER_SECOND: int = 60
+const SHADOW_DIRECTIONAL_SPLITS: String = "2_splits"
+const FOG_DENSITY: float = 0.0015
 const FOG_SKY_AFFECT: float = 0
 const AMBIENT_SKY_CONTRIBUTION: float = 0.7
-const TONEMAP_MODE: String = "aces"
+const TONEMAP_MODE: String = "filmic"
 const TONEMAP_WHITE: float = 6
 const SKY_CURVE: float = 0.12
 const SUN_ANGLE_MAX: float = 18
@@ -181,14 +212,118 @@ const MUSIC_PLAYER_COUNT: int = 2
 
 const HOURS_PER_DAY: int = 24
 const MINUTES_PER_HOUR: int = 60
-const SECONDS_PER_GAME_DAY: float = 1200
+const SECONDS_PER_GAME_DAY: float = 1440
 const START_HOUR: float = 8
+const TIME_SCALE_DEFAULT: float = 1
+const TIME_SCALE_MAX: float = 720
+const SHOT_HOUR: float = 9
 
 ## Períodos do dia, na ordem cronológica de um ciclo.
-enum Period { NIGHT, DAWN, MORNING, AFTERNOON, DUSK }
+enum Period { MADRUGADA, AMANHECER, DIA, ENTARDECER, NOITE }
 
-## Hora em que cada período começa, exceto NIGHT (que fecha o ciclo).
-const PERIOD_START_HOURS: Array[int] = [5, 7, 12, 17, 20]
+## Hora em que cada período começa, menos o primeiro — que vale até o segundo começar.
+const PERIOD_START_HOURS: Array[int] = [5, 8, 17, 20]
+
+## Nome de cada período, na mesma ordem do enum. Para relatório e prova lerem em português.
+const PERIOD_NAMES: Array[StringName] = [&"MADRUGADA", &"AMANHECER", &"DIA", &"ENTARDECER", &"NOITE"]
+
+# --- Ciclo dia/noite ---------------------------------------------------------
+
+## Chaves do dia inteiro. Não são estados: são pontos de gradiente, e o que se vê entre
+## duas delas é interpolação. `tools/gen_daycycle.py` gera o `.tres` a partir desta mesma
+## tabela — aqui ela existe para a prova poder conferir o que foi gerado.
+const DAY_CYCLE_KEYS: Array[Dictionary] = [
+	{"hour": 0, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.09, "fog_scale": 1.9, "ambient": 0.2, "elevation": 34, "azimuth": 20, "light": 0},
+	{"hour": 4, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.09, "fog_scale": 1.9, "ambient": 0.2, "elevation": 22, "azimuth": 60, "light": 0},
+	{"hour": 5.5, "zenith": Color(0.243137, 0.360784, 0.509804, 1), "horizon": Color(0.815686, 0.541176, 0.368627, 1), "sun": Color(1.0, 0.768627, 0.541176, 1), "fog": Color(0.603922, 0.541176, 0.521569, 1), "sun_energy": 0.35, "fog_scale": 2.4, "ambient": 0.45, "elevation": 4, "azimuth": 84, "light": 0.25},
+	{"hour": 7, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.815686, 0.541176, 0.368627, 1), "sun": Color(1.0, 0.768627, 0.541176, 1), "fog": Color(0.603922, 0.541176, 0.521569, 1), "sun_energy": 0.85, "fog_scale": 1.5, "ambient": 0.8, "elevation": 18, "azimuth": 100, "light": 0.75},
+	{"hour": 9, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.788235, 0.721569, 0.580392, 1), "sun": Color(1.0, 0.941176, 0.854902, 1), "fog": Color(0.729412, 0.686275, 0.584314, 1), "sun_energy": 1.1, "fog_scale": 1, "ambient": 1, "elevation": 42, "azimuth": 130, "light": 1},
+	{"hour": 13, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.788235, 0.721569, 0.580392, 1), "sun": Color(1.0, 0.941176, 0.854902, 1), "fog": Color(0.729412, 0.686275, 0.584314, 1), "sun_energy": 1.2, "fog_scale": 0.85, "ambient": 1, "elevation": 66, "azimuth": 195, "light": 1},
+	{"hour": 16.5, "zenith": Color(0.305882, 0.486275, 0.682353, 1), "horizon": Color(0.788235, 0.721569, 0.580392, 1), "sun": Color(1.0, 0.941176, 0.854902, 1), "fog": Color(0.729412, 0.686275, 0.584314, 1), "sun_energy": 1, "fog_scale": 1, "ambient": 0.95, "elevation": 34, "azimuth": 244, "light": 1},
+	{"hour": 18.5, "zenith": Color(0.227451, 0.305882, 0.478431, 1), "horizon": Color(0.768627, 0.443137, 0.247059, 1), "sun": Color(1.0, 0.619608, 0.388235, 1), "fog": Color(0.556863, 0.431373, 0.352941, 1), "sun_energy": 0.6, "fog_scale": 1.6, "ambient": 0.62, "elevation": 9, "azimuth": 268, "light": 0.55},
+	{"hour": 20, "zenith": Color(0.227451, 0.305882, 0.478431, 1), "horizon": Color(0.768627, 0.443137, 0.247059, 1), "sun": Color(1.0, 0.619608, 0.388235, 1), "fog": Color(0.556863, 0.431373, 0.352941, 1), "sun_energy": 0.22, "fog_scale": 2.2, "ambient": 0.34, "elevation": 3, "azimuth": 284, "light": 0.12},
+	{"hour": 21.5, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.1, "fog_scale": 2, "ambient": 0.22, "elevation": 20, "azimuth": 320, "light": 0},
+	{"hour": 24, "zenith": Color(0.066667, 0.109804, 0.2, 1), "horizon": Color(0.117647, 0.164706, 0.258824, 1), "sun": Color(0.560784, 0.65098, 0.788235, 1), "fog": Color(0.101961, 0.141176, 0.219608, 1), "sun_energy": 0.09, "fog_scale": 1.9, "ambient": 0.2, "elevation": 34, "azimuth": 380, "light": 0},
+]
+
+const DAY_CYCLE_DIR: String = "res://resources/daycycle"
+const DAY_CYCLE_MIN_STEP: float = 0.000333
+const DAY_CYCLE_LIGHT_ON: float = 0.35
+const DAY_CYCLE_LIGHT_FADE: float = 0.18
+const DAY_CYCLE_LANTERN_LIGHTS: int = 6
+const DAY_CYCLE_LANTERN_RANGE: float = 9.5
+const DAY_CYCLE_LANTERN_ENERGY: float = 1.5
+const DAY_CYCLE_LANTERN_HEIGHT: float = 2.55
+const DAY_CYCLE_GLOW_SIZE: float = 0.34
+
+# --- Clima -------------------------------------------------------------------
+
+const WEATHER_DIR: String = "res://resources/weather"
+const WEATHER_IDS: Array[StringName] = [&"ensolarado", &"nublado", &"chuva"]
+const WEATHER_START: StringName = &"ensolarado"
+const WEATHER_BLEND_SECONDS: float = 12
+const WEATHER_BLEND_MAX_STEP: float = 0.1
+const WEATHER_CHANGE_CHANCE: float = 0.18
+const WEATHER_RAIN_PARTICLES: int = 900
+const WEATHER_RAIN_BOX: float = 26
+const WEATHER_RAIN_HEIGHT: float = 14
+const WEATHER_RAIN_SPEED: float = 17
+const WEATHER_RAIN_LENGTH: float = 0.42
+const WEATHER_RAIN_WIDTH: float = 0.02
+const WEATHER_RAIN_SLANT: float = 3
+
+## Peso de sorteio de cada clima quando o tempo vira. Soma não precisa dar 1: o sorteio
+## normaliza. O que importa é a proporção — sol é o dobro de nublado, e chuva é rara.
+const WEATHER_WEIGHTS: Dictionary = {
+	&"ensolarado": 0.5,
+	&"nublado": 0.32,
+	&"chuva": 0.18,
+}
+
+# --- Zonas de áudio ----------------------------------------------------------
+
+const AUDIO_DIR: String = "res://assets/generated/audio"
+const AUDIO_ZONES: Array[StringName] = [&"floresta", &"cidade", &"interior"]
+const AUDIO_ZONE_START: StringName = &"floresta"
+const AUDIO_ZONE_CROSSFADE: float = 2
+const AUDIO_ZONE_HYSTERESIS: float = 6
+const AUDIO_ZONE_POLL_HZ: float = 4
+const AUDIO_AMBIENCE_PLAYERS: int = 2
+const AUDIO_MUFFLE_LERP: float = 1.5
+const AUDIO_MUFFLE_INTERIOR_HZ: float = 2200
+const AUDIO_FILTER_MAX_HZ: float = 20000
+const AUDIO_PEAK: float = 0.89
+
+const MUSIC_CONTEXTS: Array[StringName] = [&"exterior", &"cidade", &"noite"]
+const MUSIC_NIGHT_PERIODS: Array[StringName] = [&"NOITE", &"MADRUGADA"]
+const MUSIC_THEME_IDS: Array[StringName] = [&"exterior", &"cidade", &"noite"]
+
+## Superfícies de passo geradas. O jogo escolhe pelo nome; a prova confere que existem.
+const STEP_SURFACES: Array[StringName] = [&"terra", &"pedra", &"madeira"]
+const STEP_VARIANTS: int = 3
+const VOICE_BANK_SYLLABLES: int = 8
+
+# --- Prova do ciclo e do som -------------------------------------------------
+
+const DAYNIGHT_DIR: String = "res://docs/daynight"
+const DAYNIGHT_PROOF_SCALE: float = 360
+const DAYNIGHT_SAMPLES: int = 480
+const DAYNIGHT_IDLE_FRAMES: int = 240
+const DAYNIGHT_MAX_COLOR_RATE: float = 2
+const DAYNIGHT_MAX_ENERGY_RATE: float = 2
+const DAYNIGHT_MAX_COLOR_STEP: float = 0.02
+const DAYNIGHT_MAX_ENERGY_STEP: float = 0.05
+const DAYNIGHT_SETTLE_SECONDS: float = 70
+const DAYNIGHT_DAY_HOUR: float = 12
+const DAYNIGHT_NIGHT_HOUR: float = 1
+const DAYNIGHT_MAX_NIGHT_PLAZA: float = 0.15
+
+const SOUNDSCAPE_SETTLE_SECONDS: float = 3
+const SOUNDSCAPE_TRAVEL_SECONDS: float = 6
+const SOUNDSCAPE_SAMPLE_HZ: float = 30
+const SOUNDSCAPE_MIN_TOTAL: float = 0.72
+const SOUNDSCAPE_MAX_STEP: float = 0.08
+const SOUNDSCAPE_CROSSFADE_TOLERANCE: float = 0.35
 
 # --- Entrada -----------------------------------------------------------------
 
@@ -196,12 +331,607 @@ const MOUSE_SENSITIVITY: float = 0.12
 const MOUSE_SENSITIVITY_MIN: float = 0.02
 const MOUSE_SENSITIVITY_MAX: float = 1
 
+# --- Opções do jogador -------------------------------------------------------
+
+## Fases de uma sessão. Ficam aqui, e não no autoload, porque script de ferramenta não
+## enxerga identificador de autoload — ver o comentário em `tools/params.py`.
+enum Phase { BOOT, MAIN_MENU, GENERATING, PLAYING, PAUSED, CUTSCENE }
+
+const QUALITY_LEVELS: Array[StringName] = [&"baixa", &"media", &"alta"]
+const QUALITY_DEFAULT: StringName = &"media"
+
+## Presets de qualidade. Cada um é um conjunto de botões que o jogador não deveria ter de
+## entender um a um — quem os aplica é `Settings`.
+const QUALITY_PRESETS: Dictionary = {
+	&"baixa": {&"msaa": 0, &"shadow_size": 2048, &"shadow_distance": 70, &"splits": "orthogonal", &"shadow_filter": 0, &"scatter": 0.55, &"lod_scale": 0.7, &"debanding": false, &"occlusion": true, &"particles": 0.4},
+	&"media": {&"msaa": 1, &"shadow_size": 4096, &"shadow_distance": 120, &"splits": "2_splits", &"shadow_filter": 3, &"scatter": 1, &"lod_scale": 1, &"debanding": true, &"occlusion": true, &"particles": 1},
+	&"alta": {&"msaa": 2, &"shadow_size": 4096, &"shadow_distance": 180, &"splits": "4_splits", &"shadow_filter": 4, &"scatter": 1, &"lod_scale": 1.4, &"debanding": true, &"occlusion": true, &"particles": 1},
+}
+
+const RENDER_DISTANCE_MIN: float = 0.5
+const RENDER_DISTANCE_MAX: float = 1.5
+const RENDER_DISTANCE_DEFAULT: float = 1
+const NPC_DENSITY_MIN: float = 0.25
+const NPC_DENSITY_MAX: float = 1
+const NPC_DENSITY_DEFAULT: float = 1
+const VSYNC_DEFAULT: bool = true
+
+## Volume inicial de cada barramento, em escala linear.
+const VOLUME_DEFAULTS: Dictionary = {
+	&"Master": 0.9,
+	&"Music": 0.7,
+	&"SFX": 0.9,
+	&"Ambience": 0.8,
+}
+
+const SETTINGS_PATH: String = "user://settings.json"
+const SAVE_PATH: String = "user://save.json"
+const SAVE_VERSION: int = 1
+
+# --- Interface ---------------------------------------------------------------
+
+const UI_TITLE_FONT_SIZE: int = 64
+const UI_FONT_SIZE: int = 22
+const UI_SMALL_FONT_SIZE: int = 17
+const UI_BUTTON_WIDTH: int = 340
+const UI_BUTTON_HEIGHT: int = 46
+const UI_MARGIN: int = 56
+const UI_SPACING: int = 12
+const UI_FADE_SECONDS: float = 0.35
+const UI_PANEL_ALPHA: float = 0.86
+const UI_SLIDER_WIDTH: int = 260
+const FPS_REFRESH_HZ: float = 4
+const FPS_FONT_SIZE: int = 16
+
+# --- Abertura ----------------------------------------------------------------
+
+const OPENING_HOUR: float = 6.4
+const OPENING_CAMP_ROAD_T: float = 0.62
+const OPENING_CAMP_OFFSET: float = 7
+const OPENING_CAMP_PROPS: int = 5
+const OPENING_CAMP_RADIUS: float = 3.2
+const OPENING_FIRE_PARTICLES: int = 26
+const OPENING_FIRE_HEIGHT: float = 0.9
+const OPENING_FIRE_SCALE: float = 0.42
+const OPENING_LOOK_SECONDS: float = 2.2
+const OPENING_LANTERN_SPACING: float = 26
+
 # --- Geração -----------------------------------------------------------------
 
 const WORLD_SEED: int = 20250107
 const BENCH_WARMUP_FRAMES: int = 30
 const BENCH_SAMPLE_FRAMES: int = 240
 const SCREENSHOT_WAIT_FRAMES: int = 10
+
+# --- Vale: terreno -----------------------------------------------------------
+
+const TERRAIN_SIZE: float = 512
+const TERRAIN_CELL: float = 4
+const TERRAIN_CHUNK_CELLS: int = 32
+const TERRAIN_HEIGHT: float = 46
+const TERRAIN_BASE_FREQUENCY: float = 0.0016
+const TERRAIN_BASE_OCTAVES: int = 5
+const TERRAIN_BASE_LACUNARITY: float = 2.05
+const TERRAIN_BASE_GAIN: float = 0.47
+const TERRAIN_DETAIL_FREQUENCY: float = 0.011
+const TERRAIN_DETAIL_OCTAVES: int = 3
+const TERRAIN_DETAIL_WEIGHT: float = 0.1
+const TERRAIN_VALLEY_POWER: float = 1.55
+const TERRAIN_RIM_START: float = 0.62
+const TERRAIN_RIM_HEIGHT: float = 0.55
+const TERRAIN_EROSION_PASSES: int = 6
+const TERRAIN_TALUS: float = 0.62
+const TERRAIN_EROSION_RATE: float = 0.45
+const TERRAIN_PLAIN_CENTER: Vector2 = Vector2(0, 0)
+const TERRAIN_PLAIN_WANDER: float = 84
+const TERRAIN_PLAIN_RADIUS: float = 62
+const TERRAIN_PLAIN_FALLOFF: float = 54
+const TERRAIN_PLAIN_FLATNESS: float = 0.94
+const TERRAIN_SLOPE_ROCK: float = 0.6
+const TERRAIN_SLOPE_DIRT: float = 0.34
+const TERRAIN_ALTITUDE_ROCK: float = 0.72
+const TERRAIN_ALTITUDE_GRASS: float = 0.46
+const TERRAIN_TONE_JITTER: float = 0.05
+
+# --- Vale: estrada -----------------------------------------------------------
+
+const ROAD_WIDTH: float = 6
+const ROAD_SHOULDER: float = 5
+const ROAD_MAX_SLOPE: float = 0.11
+const ROAD_GRADE_MARGIN: float = 0.03
+const ROAD_SAMPLES: int = 220
+const ROAD_SMOOTH_PASSES: int = 40
+const ROAD_CONTROL_POINTS: int = 5
+const ROAD_WANDER: float = 78
+const ROAD_ENTRY_MARGIN: float = 12
+const ROAD_BED_CELLS: float = 1.5
+
+# --- Vale: vegetação ---------------------------------------------------------
+
+const SCATTER_TILE: float = 128
+const SCATTER_JITTER: float = 0.42
+const SCATTER_ROAD_CLEARANCE: float = 3
+
+## Tipos espalhados pelo vale. Cada entrada vira um `MultiMeshInstance3D` por faixa de
+## LOD e por bloco — trocar a lista aqui muda a vegetação inteira.
+const SCATTER_TYPES: Array[Dictionary] = [
+	{"part": &"tree_broadleaf", "density": 34, "max_slope": 0.42, "altitude": Vector2(0.04, 0.55), "scale": Vector2(0.85, 1.35), "far": true},
+	{"part": &"tree_conifer", "density": 26, "max_slope": 0.52, "altitude": Vector2(0.34, 0.86), "scale": Vector2(0.8, 1.4), "far": true},
+	{"part": &"bush", "density": 55, "max_slope": 0.46, "altitude": Vector2(0.02, 0.62), "scale": Vector2(0.7, 1.3), "far": false},
+	{"part": &"grass_tuft", "density": 210, "max_slope": 0.3, "altitude": Vector2(0, 0.5), "scale": Vector2(0.6, 1.2), "far": false},
+	{"part": &"rock", "density": 30, "max_slope": 0.95, "altitude": Vector2(0.1, 1), "scale": Vector2(0.7, 1.8), "far": true},
+]
+
+const SCATTER_LOD_BANDS: Array[float] = [92, 210, 340]
+const SCATTER_LOD_FADE: float = 18
+const SCATTER_LOD_THINNING: Array[float] = [1, 0.62, 0.28]
+const SCATTER_PROXY_SIDES: Array[int] = [0, 6, 4]
+const SCATTER_PROXY_TAPER: float = 0.35
+
+# --- Vale: navegação ---------------------------------------------------------
+
+const NAV_CELL_SIZE: float = 1
+const NAV_CELL_HEIGHT: float = 0.4
+const NAV_AGENT_RADIUS: float = 0.5
+const NAV_AGENT_HEIGHT: float = 1.9
+const NAV_AGENT_MAX_CLIMB: float = 0.5
+const NAV_AGENT_MAX_SLOPE_DEG: float = 42
+const NAV_GROUP: StringName = &"navsource"
+
+# --- Vale: prova -------------------------------------------------------------
+
+const VALLEY_DIR: String = "res://docs/valley"
+const VALLEY_SEEDS: Array[int] = [123, 777]
+const VALLEY_MIN_DIFFERENCE: float = 0.12
+const VALLEY_MIN_WALKABLE: float = 0.35
+
+# --- Cidade: sítio e muralha -------------------------------------------------
+
+const CITY_SITE_CANDIDATES: int = 96
+const CITY_SITE_PROBES: int = 40
+const CITY_SITE_MAX_SLOPE: float = 0.22
+const CITY_SITE_ROAD_REACH: float = 110
+const CITY_SITE_ROAD_MIN: float = 14
+const CITY_SITE_SEARCH_RADIUS: float = 96
+
+const CITY_RADIUS: float = 68
+const CITY_WALL_SIDES: int = 11
+const CITY_RADIUS_JITTER: float = 0.11
+const CITY_WALL_ANGLE_JITTER: float = 0.32
+const CITY_WALL_MODULE: float = 2
+const CITY_WALL_MARGIN: float = 5
+const CITY_TOWER_EVERY: int = 3
+const CITY_GATE_WIDTH: float = 6
+
+const CITY_TERRACE_FALLOFF: float = 26
+const CITY_TERRACE_FLATNESS: float = 0.96
+
+# --- Cidade: ruas e lotes ----------------------------------------------------
+
+const CITY_PLAZA_RADIUS: float = 14
+const CITY_MAIN_STREET_WIDTH: float = 7
+const CITY_STREET_WIDTH: float = 5
+const CITY_ALLEY_WIDTH: float = 3.2
+const CITY_MAIN_STREET_BENDS: int = 4
+const CITY_MAIN_STREET_JITTER: float = 7
+const CITY_BLOCK_MIN: float = 16
+const CITY_SPLIT_JITTER: float = 0.17
+const CITY_SPLIT_MAX_DEPTH: int = 5
+const CITY_GRID_JITTER_DEG: float = 9
+
+const CITY_LOT_MIN: float = 6
+const CITY_LOT_MAX: float = 12
+const CITY_LOT_DEPTH_MAX: float = 13
+const CITY_LOT_SETBACK: float = 0.6
+const CITY_LOT_GAP: float = 0.5
+const CITY_LOT_EMPTY_CHANCE: float = 0.17
+
+# --- Cidade: prédios ---------------------------------------------------------
+
+const CITY_BUILDING_MODULE: float = 2
+const CITY_BUILDING_DEPTH_STEP: float = 4
+const CITY_FLOOR_HEIGHT: float = 3
+const CITY_WINDOW_CHANCE: float = 0.44
+const CITY_TINT_JITTER: float = 0.09
+const CITY_HIP_ROOF_CHANCE: float = 0.35
+const CITY_ROOF_DROP: float = 0.08
+
+const CITY_BUILDING_TYPES: Array[Dictionary] = [
+	{"name": &"casa", "weight": 62, "plaza_bias": 0, "floors": Vector2i(1, 2), "width": Vector2i(2, 4), "depth": Vector2i(1, 2), "marker": &"casa"},
+	{"name": &"taverna", "weight": 6, "plaza_bias": 0.9, "floors": Vector2i(2, 2), "width": Vector2i(4, 5), "depth": Vector2i(2, 2), "marker": &"taverna"},
+	{"name": &"ferraria", "weight": 6, "plaza_bias": 0.5, "floors": Vector2i(1, 1), "width": Vector2i(3, 4), "depth": Vector2i(2, 2), "marker": &"ferraria"},
+	{"name": &"celeiro", "weight": 14, "plaza_bias": -0.7, "floors": Vector2i(1, 1), "width": Vector2i(4, 5), "depth": Vector2i(2, 2), "marker": &""},
+	{"name": &"torre", "weight": 4, "plaza_bias": 0.3, "floors": Vector2i(3, 4), "width": Vector2i(2, 2), "depth": Vector2i(1, 1), "marker": &""},
+]
+
+# --- Cidade: props e interiores ----------------------------------------------
+
+const CITY_PLAZA_STALLS: int = 5
+const CITY_PLAZA_STALL_RING: float = 9.5
+const CITY_LANTERN_SPACING: float = 17
+const CITY_PROP_DENSITY: float = 46
+const CITY_YARD_PROPS: int = 4
+const CITY_CLOTHESLINE_CHANCE: float = 0.3
+const CITY_CLOTHESLINE_HEIGHT: float = 3.4
+const CITY_CLOTHESLINE_MAX_SPAN: float = 6
+
+const CITY_GROUND_BLEND: float = 0.82
+const CITY_INTERIOR_TYPES: Array[StringName] = [&"taverna", &"ferraria"]
+const CITY_INTERIOR_CARD_INSET: float = 0.22
+const CITY_INTERIOR_CARD_DARKEN: float = 0.72
+const CITY_INTERIOR_PROPS: int = 7
+
+# --- Cidade: prova -----------------------------------------------------------
+
+const CITY_DIR: String = "res://docs/shots/city"
+const CITY_SHOT_WIDTH: int = 1600
+const CITY_SHOT_HEIGHT: int = 900
+const CITY_SEEDS: Array[int] = [123, 4242, 90210]
+const CITY_DOOR_REACH: float = 2.5
+const CITY_MIN_BUILDINGS: int = 24
+const CITY_MAX_DEAD_ENDS: int = 0
+
+## Pontos de câmera das capturas: nome, marcador de referência, distância, altura e pitch.
+const CITY_SHOT_POINTS: Array[Array] = [
+	[&"praca", &"praca", 16, 4, -12],
+	[&"portao", &"portao", 19, 5, -10],
+	[&"taverna", &"taverna", 11, 3.2, -8],
+	[&"ferraria", &"ferraria", 11, 3.2, -8],
+	[&"rua", &"casa_04", 10, 2.4, -6],
+	[&"muralha", &"praca", 92, 46, -26],
+]
+
+# --- População ---------------------------------------------------------------
+
+## Corpos que `make characters` produz. O povoamento só sorteia entre estes.
+const CHARACTER_BODIES: Array[StringName] = [&"aldeao", &"guarda", &"ferreiro", &"anciao", &"batedor", &"prova_baixo", &"prova_alto"]
+
+const NPC_SCENE: String = "res://scenes/npc/npc.tscn"
+const NPC_DIR: String = "res://resources/schedules"
+const NPC_COUNT: int = 20
+const NPC_SEED_OFFSET: int = 91193
+const NPC_WALK_SPEED: float = 1.9
+const NPC_HURRY_SPEED: float = 3.1
+const NPC_TURN_RATE: float = 7
+const NPC_ARRIVE_RADIUS: float = 1.1
+const NPC_REPATH_SECONDS: float = 0.9
+const NPC_STUCK_SECONDS: float = 6
+const NPC_STUCK_PROGRESS: float = 0.35
+const NPC_TARGET_SPREAD: float = 3.4
+const NPC_IDLE_MIN: float = 2.5
+const NPC_IDLE_MAX: float = 9
+const NPC_WANDER_CHANCE: float = 0.45
+const NPC_WANDER_RADIUS: float = 7
+const NPC_WORK_BOB: float = 0.45
+const NPC_SENSE_RADIUS: float = 6.5
+const NPC_LOOK_SECONDS: float = 2.6
+const NPC_SPEAK_COOLDOWN: float = 26
+const NPC_SPEAK_CHANCE: float = 0.35
+const NPC_SPEAK_SECONDS: float = 3.2
+const NPC_SPEAK_HEIGHT: float = 0.35
+const NPC_REACT_SECONDS: float = 1.4
+const NPC_SHADOW_RADIUS: float = 26
+const NPC_ACTIVE_RADIUS: float = 60
+const NPC_NEAR_RADIUS: float = 22
+const NPC_FAR_STRIDE: int = 3
+const NPC_ACTIVE_HYSTERESIS: float = 8
+const NPC_DIRECTOR_HZ: float = 4
+const NPC_ABSTRACT_SPEED: float = 1.9
+
+## Falas curtas por arquétipo. Texto flutuante, não diálogo — a fase 11 traz a conversa.
+const NPC_LINES: Dictionary = {
+	&"comerciante": ["Bom preço hoje!", "Leve dois.", "Fresco da manhã.", "Olha a feira!"],
+	&"artesao": ["Trabalho firme.", "Volte mais tarde.", "Ferro quente.", "Quase pronto."],
+	&"crianca": ["Corre!", "Me pega!", "Olha isso!", "Vamos ali."],
+}
+
+## Arquétipos: quem é, com que corpo, onde trabalha e com que rotina.
+const NPC_ARCHETYPES: Array[Dictionary] = [
+	{"name": &"comerciante", "share": 0.4, "bodies": [&"aldeao", &"anciao"], "work": &"mercado", "schedule": &"comerciante"},
+	{"name": &"artesao", "share": 0.35, "bodies": [&"ferreiro", &"aldeao"], "work": &"ferraria", "schedule": &"artesao"},
+	{"name": &"crianca", "share": 0.25, "bodies": [&"batedor"], "work": &"poco", "schedule": &"crianca"},
+]
+
+# --- Vida ambiente -----------------------------------------------------------
+
+const AMBIENT_SMOKE_CHIMNEYS: int = 4
+const AMBIENT_SMOKE_PARTICLES: int = 14
+const AMBIENT_SMOKE_LIFETIME: float = 5.5
+const AMBIENT_SMOKE_RISE: float = 1.4
+const AMBIENT_SMOKE_SCALE: float = 0.34
+const AMBIENT_BIRD_FLOCKS: int = 2
+const AMBIENT_BIRDS_PER_FLOCK: int = 5
+const AMBIENT_BIRD_HEIGHT: float = 17
+const AMBIENT_BIRD_RADIUS: float = 42
+const AMBIENT_BIRD_SECONDS: float = 34
+const AMBIENT_BIRD_SPREAD: float = 6
+const AMBIENT_LEAF_COUNT: int = 90
+const AMBIENT_LEAF_LIFETIME: float = 9
+const AMBIENT_LEAF_FALL: float = 0.7
+const AMBIENT_LEAF_SCALE: float = 0.13
+const AMBIENT_WIND_SPEED: float = 1.6
+const AMBIENT_WIND_SWAY_DEG: float = 7
+const AMBIENT_DOG_SPEED: float = 2.4
+const AMBIENT_DOG_PAUSE: float = 2
+const AMBIENT_DOG_STOPS: int = 5
+const AMBIENT_HAMMER_PERIOD: float = 1.15
+const AMBIENT_HAMMER_LIFT: float = 0.42
+
+# --- População: prova --------------------------------------------------------
+
+const POPULATION_DIR: String = "res://docs/population"
+const POPULATION_SECONDS: float = 180
+const POPULATION_SAMPLE_HZ: float = 2
+const POPULATION_MIN_MOVERS: float = 0.5
+const POPULATION_WINDOW: float = 20
+const POPULATION_MIN_NOVELTY: float = 0.05
+const POPULATION_MAX_STUCK: int = 0
+const POPULATION_MAX_CLIPPING: int = 0
+
+# --- Interação ---------------------------------------------------------------
+
+const INTERACT_SENSE_RADIUS: float = 3.6
+const INTERACT_MAX_ANGLE_DEG: float = 62
+const INTERACT_REFRESH_HZ: float = 12
+const INTERACT_CENTER_BIAS: float = 0.75
+const INTERACT_FOCUS_HEIGHT: float = 1.55
+const INTERACT_AREA_RADIUS: float = 0.7
+
+const PROMPT_FADE_SECONDS: float = 0.16
+const PROMPT_BOTTOM_MARGIN: int = 84
+const PROMPT_FONT_SIZE: int = 20
+const PROMPT_KEY_FONT_SIZE: int = 17
+const PROMPT_ALPHA: float = 0.86
+
+# --- Diálogo -----------------------------------------------------------------
+
+const DIALOGUE_DIR: String = "res://resources/dialogues"
+const DIALOGUE_MAX_CHOICES: int = 4
+const DIALOGUE_PANEL_WIDTH: float = 0.58
+const DIALOGUE_PANEL_MARGIN: int = 56
+const DIALOGUE_FADE_SECONDS: float = 0.2
+const DIALOGUE_TEXT_SPEED: float = 52
+const DIALOGUE_FONT_SIZE: int = 21
+const DIALOGUE_SPEAKER_FONT_SIZE: int = 17
+const DIALOGUE_CHOICE_FONT_SIZE: int = 18
+const DIALOGUE_PANEL_ALPHA: float = 0.82
+
+const DIALOGUE_CAMERA_BLEND: float = 3.2
+const DIALOGUE_CAMERA_SIDE: float = 0.85
+const DIALOGUE_CAMERA_BACK: float = 2.35
+const DIALOGUE_CAMERA_RISE: float = 0.18
+const DIALOGUE_CAMERA_FOV: float = 46
+
+## Toda árvore gerada, pelo nome. Não é registro: ninguém precisa desta lista para abrir
+## uma conversa — o runner monta o caminho a partir do identificador e carrega. Ela existe
+## para a prova poder percorrer o que foi gerado, inclusive as árvores que caminho de código
+## nenhum referencia.
+const DIALOGUE_IDS: Array[StringName] = [&"aldeao_saudacao", &"ferreiro_encomenda", &"guarda_portao"]
+
+## Qual árvore cada arquétipo usa. Nome, não caminho — o runner monta o caminho.
+const DIALOGUE_BY_ARCHETYPE: Dictionary = {
+	&"comerciante": &"aldeao_saudacao",
+	&"artesao": &"ferreiro_encomenda",
+	&"crianca": &"aldeao_saudacao",
+}
+
+# --- Voz procedural ----------------------------------------------------------
+
+const VOICE_SAMPLE_RATE: int = 22050
+const VOICE_SYLLABLE_MS: int = 95
+const VOICE_GAP_MS: int = 45
+const VOICE_SYLLABLES_PER_LINE: int = 5
+const VOICE_ATTACK: float = 0.18
+const VOICE_RELEASE: float = 0.45
+const VOICE_VOLUME_DB: float = -14
+
+## Perfil de voz por postura do corpo. Um corpo novo herda voz sem tabela nova.
+const VOICE_PROFILES: Dictionary = {
+	&"ereto": {&"base_hz": 132.0, &"spread": 0.16, &"wobble": 5.0, &"brightness": 0.55},
+	&"curvado": {&"base_hz": 104.0, &"spread": 0.12, &"wobble": 3.2, &"brightness": 0.35},
+	&"agil": {&"base_hz": 178.0, &"spread": 0.22, &"wobble": 7.5, &"brightness": 0.75},
+}
+
+# --- Facções -----------------------------------------------------------------
+
+const FACTIONS: Array[StringName] = [&"vilarejo", &"guarda", &"mercadores"]
+const REPUTATION_MIN: int = -100
+const REPUTATION_MAX: int = 100
+const REPUTATION_START: int = 0
+
+const DIALOGUE_PROOF_SECONDS: float = 6
+const DIALOGUE_PROOF_TOLERANCE: float = 0.35
+
+# --- Jogador -----------------------------------------------------------------
+
+const PLAYER_SCENE: String = "res://scenes/player/player.tscn"
+const PLAYER_BODY: StringName = &"aldeao"
+const PLAYER_WALK_SPEED: float = 3.2
+const PLAYER_RUN_SPEED: float = 6
+const PLAYER_ACCELERATION: float = 12
+const PLAYER_DECELERATION: float = 16
+const PLAYER_AIR_CONTROL: float = 0.35
+const PLAYER_TURN_SPEED: float = 12
+const PLAYER_JUMP_HEIGHT: float = 1.15
+const PLAYER_GRAVITY: float = 22
+const PLAYER_FALL_GRAVITY_SCALE: float = 1.4
+const PLAYER_TERMINAL_VELOCITY: float = 32
+const PLAYER_COYOTE_TIME: float = 0.12
+const PLAYER_JUMP_BUFFER: float = 0.12
+const PLAYER_CAPSULE_RADIUS: float = 0.3
+const PLAYER_FLOOR_MAX_ANGLE_DEG: float = 46
+const PLAYER_FLOOR_SNAP: float = 0.35
+const PLAYER_INTERACT_RANGE: float = 2.4
+
+# --- Câmera de terceira pessoa -----------------------------------------------
+
+const CAMERA_DISTANCE: float = 4.2
+const CAMERA_DISTANCE_MIN: float = 1.8
+const CAMERA_DISTANCE_MAX: float = 7.5
+const CAMERA_ZOOM_STEP: float = 0.45
+const CAMERA_TARGET_HEIGHT: float = 0.86
+const CAMERA_PITCH_MIN_DEG: float = -60
+const CAMERA_PITCH_MAX_DEG: float = 35
+const CAMERA_START_PITCH_DEG: float = -12
+const CAMERA_SPRING_MARGIN: float = 0.28
+const CAMERA_PROBE_RADIUS: float = 0.22
+const CAMERA_FOLLOW_LAG: float = 11
+const CAMERA_FOV: float = 70
+const CAMERA_FOV_RUN_BONUS: float = 4
+const CAMERA_FOV_LERP: float = 4.5
+const CAMERA_SHAKE_AMPLITUDE: float = 0.055
+const CAMERA_SHAKE_DECAY: float = 7
+const CAMERA_SHAKE_FREQUENCY: float = 24
+const CAMERA_SHAKE_MIN_FALL: float = 5
+const CAMERA_SHAKE_MAX_FALL: float = 18
+
+# --- Prova do controlador ----------------------------------------------------
+
+const PLAYTEST_DIR: String = "res://docs/player"
+const PLAYTEST_ARENA_RADIUS: float = 14
+const PLAYTEST_LEDGE_OFFSET: Vector2 = Vector2(3, 0)
+const PLAYTEST_LEDGE_HEIGHT: float = 1.6
+const PLAYTEST_SETTLE_FRAMES: int = 12
+const PLAYTEST_TOLERANCE: float = 0.08
+
+# --- Locomoção procedural ----------------------------------------------------
+
+## Perfis de marcha gerados em `resources/gaits/`, um por postura.
+const GAIT_DIR: String = "res://resources/gaits"
+
+const GAIT_MOVE_THRESHOLD: float = 0.06
+const GAIT_RUN_SPEED: float = 2.9
+const GAIT_STRIDE_HIP_FACTOR: float = 0.62
+const GAIT_STRIDE_SPEED_FACTOR: float = 0.22
+const GAIT_STRIDE_MIN: float = 0.28
+const GAIT_STRIDE_MAX: float = 2.1
+const GAIT_DUTY_WALK: float = 0.62
+const GAIT_DUTY_RUN: float = 0.46
+const GAIT_SPEED_SMOOTHING: float = 9
+const GAIT_BLEND_SPEED: float = 5
+const GAIT_GROUND_PROBE_UP: float = 0.9
+const GAIT_GROUND_PROBE_DOWN: float = 2.2
+const GAIT_ANKLE_HEIGHT: float = 0.055
+
+## Perfil de marcha por postura. É o parâmetro por povo que faz corpos diferentes
+## andarem diferente sem uma linha de código específica: o mesmo nó lê outro perfil.
+const GAIT_PROFILES: Dictionary = {
+	&"ereto": {
+		&"stride_scale":     1.0,
+		&"cadence_scale":    1.0,
+		&"foot_lift":        0.075,
+		&"foot_lift_run":    0.135,
+		&"hip_bounce":       0.016,
+		&"hip_sway_deg":     4.0,
+		&"hip_drop_deg":     3.5,
+		&"torso_lean_deg":   3.0,
+		&"torso_twist_deg":  5.0,
+		&"arm_swing_deg":    26.0,
+		&"arm_bias_deg":     2.0,
+		&"elbow_bend_deg":   14.0,
+		&"head_bob":         0.008,
+		&"knee_forward":     1.0,
+	},
+	&"curvado": {
+		&"stride_scale":     0.78,
+		&"cadence_scale":    0.88,
+		&"foot_lift":        0.045,
+		&"foot_lift_run":    0.08,
+		&"hip_bounce":       0.01,
+		&"hip_sway_deg":     2.5,
+		&"hip_drop_deg":     5.0,
+		&"torso_lean_deg":   9.0,
+		&"torso_twist_deg":  2.5,
+		&"arm_swing_deg":    14.0,
+		&"arm_bias_deg":     16.0,
+		&"elbow_bend_deg":   30.0,
+		&"head_bob":         0.012,
+		&"knee_forward":     0.85,
+	},
+	&"agil": {
+		&"stride_scale":     1.18,
+		&"cadence_scale":    1.12,
+		&"foot_lift":        0.105,
+		&"foot_lift_run":    0.185,
+		&"hip_bounce":       0.024,
+		&"hip_sway_deg":     6.5,
+		&"hip_drop_deg":     2.5,
+		&"torso_lean_deg":   6.0,
+		&"torso_twist_deg":  9.0,
+		&"arm_swing_deg":    38.0,
+		&"arm_bias_deg":     -3.0,
+		&"elbow_bend_deg":   22.0,
+		&"head_bob":         0.014,
+		&"knee_forward":     1.15,
+	},
+}
+
+const ARM_REST_DROP_DEG: float = 76
+const ARM_OUTWARD_DEG: float = 7
+const FOOT_SWING_TILT_DEG: float = 14
+const JUMP_TUCK_LEG_FACTOR: float = 0.62
+const SIT_FOOT_FORWARD: float = 0.24
+
+# --- Camadas aditivas --------------------------------------------------------
+
+const BREATH_FREQUENCY: float = 0.24
+const BREATH_CHEST_DEG: float = 1.6
+const BREATH_RISE: float = 0.006
+const LOOK_MAX_HEAD_YAW_DEG: float = 62
+const LOOK_MAX_HEAD_PITCH_DEG: float = 34
+const LOOK_TORSO_SHARE: float = 0.55
+const LOOK_SMOOTHING: float = 7
+const CAMERA_BOB_AMPLITUDE: float = 0.028
+const CAMERA_BOB_SIDE: float = 0.014
+const CAMERA_BOB_HARMONIC: float = 2
+
+# --- Estados extras ----------------------------------------------------------
+
+const JUMP_CROUCH_TIME: float = 0.13
+const JUMP_CROUCH_DEPTH: float = 0.14
+const JUMP_LAUNCH_TIME: float = 0.11
+const JUMP_LAUNCH_RISE: float = 0.05
+const JUMP_TUCK_DEG: float = 48
+const JUMP_LAND_TIME: float = 0.26
+const JUMP_LAND_DEPTH: float = 0.17
+const INTERACT_REACH_TIME: float = 0.22
+const INTERACT_HOLD_TIME: float = 0.35
+const INTERACT_RETURN_TIME: float = 0.3
+const SIT_HIP_DROP: float = 0.26
+const SIT_HIP_TIME: float = 0.4
+const SIT_KNEE_DEG: float = 84
+const SIT_TORSO_DEG: float = 6
+const CARRY_ARM_DEG: float = 62
+const CARRY_ELBOW_DEG: float = 74
+const CARRY_TORSO_LEAN_DEG: float = -4
+const CARRY_BLEND_TIME: float = 0.35
+
+# --- Prova visual da locomoção -----------------------------------------------
+
+## Tiras de quadros de `tools/anim_preview.gd`. Derivado: está no .gitignore.
+const ANIM_DIR: String = "res://docs/anim"
+const ANIM_FRAME_WIDTH: int = 300
+const ANIM_FRAME_HEIGHT: int = 460
+const ANIM_STRIP_COLUMNS: int = 8
+const ANIM_STEP_FRAMES: int = 7
+const ANIM_SETTLE_FRAMES: int = 6
+const ANIM_CAMERA_FOV: float = 34
+const ANIM_CAMERA_HEIGHT: float = 0.62
+const ANIM_CAMERA_DISTANCE: float = 4.4
+const ANIM_CAMERA_YAW_DEG: float = 200
+const ANIM_WALK_SPEED: float = 1.5
+const ANIM_RUN_SPEED: float = 4.2
+const ANIM_JUMP_SPEED: float = 1.2
+const ANIM_FOOT_SLIDE_LIMIT: float = 0.02
+const ANIM_SUBJECT: String = "aldeao"
+const PREVIEW_FIGURE_HEIGHT_FALLBACK: float = 1.75
+const ANIM_GAIT_COMPARISON: Array[String] = ["guarda", "batedor", "anciao"]
+const ANIM_COMPARISON_PHASE: float = 0.5
+const ANIM_STATE_FRAMES: int = 40
+const ANIM_INTERACT_REACH: Vector3 = Vector3(0.22, 0.72, -0.34)
+const ANIM_LOOK_AT: Vector3 = Vector3(-2.4, 1.5, 1.2)
+const CHARACTER_DIR: String = "res://assets/generated/characters"
+const KIT_DIR: String = "res://assets/generated/kit"
 
 # --- Olhos: capturas e benchmark ---------------------------------------------
 
@@ -214,22 +944,33 @@ const BENCH_HISTORY: String = "res://docs/bench_history.csv"
 
 ## Pontos de câmera nomeados: [nome, posição, alvo].
 const SHOT_POINTS: Array = [
-	[&"wide", Vector3(0, 12, 26), Vector3(0, 0, 0)],
-	[&"eye", Vector3(0, 1.7, 9), Vector3(0, 1.6, 0)],
-	[&"top", Vector3(0, 40, 0.1), Vector3(0, 0, 0)],
-	[&"horizon", Vector3(18, 2.2, 18), Vector3(0, 1, 0)],
+	[&"vale", Vector3(0, 88, 190), Vector3(0, 8, -20)],
+	[&"praca", Vector3(0, 16, 62), Vector3(0, 4, 0)],
+	[&"estrada", Vector3(-40, 12, 120), Vector3(0, 4, 40)],
+	[&"encosta", Vector3(150, 46, 150), Vector3(40, 10, 40)],
 ]
 
 ## Rota fixa do benchmark. Fixa de propósito: um passeio diferente a cada execução
 ## tornaria o histórico ruído em vez de sinal.
 const BENCH_ROUTE: Array[Vector3] = [
-	Vector3(0, 1.7, 20),
-	Vector3(20, 1.7, 20),
-	Vector3(20, 8, -20),
-	Vector3(-20, 3, -20),
-	Vector3(-20, 1.7, 20),
+	Vector3(0, 3, 0),
+	Vector3(90, 3, 70),
+	Vector3(170, 3, -60),
+	Vector3(-40, 3, -170),
+	Vector3(-160, 3, 40),
 ]
-const BENCH_ROUTE_SECONDS: float = 8
+## Estações do bench: nome, marcador, distância, altura, pitch, giro e se lota a praça.
+const BENCH_STATIONS: Array[Array] = [
+	[&"vale", &"portao", 170, 0, -4, 180, false],
+	[&"portao", &"portao", 19, 5, -10, 0, false],
+	[&"praca", &"praca", 16, 4, -12, 0, true],
+]
+const BENCH_STATION_SETTLE: int = 24
+const BENCH_STATION_FRAMES: int = 90
+const BENCH_CROWD_RADIUS: float = 9
+
+const BENCH_ROUTE_SECONDS: float = 14
+const BENCH_CAMERA_CLEARANCE: float = 2.4
 const BENCH_LOW_PERCENTILE: float = 1
 
 # --- Acesso ------------------------------------------------------------------

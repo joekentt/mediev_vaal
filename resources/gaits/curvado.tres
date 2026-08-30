@@ -1,0 +1,26 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_gaits.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_resource type="Resource" script_class="GaitProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/gait_profile.gd" id="1_gait_profile"]
+
+[resource]
+script = ExtResource("1_gait_profile")
+posture = &"curvado"
+stride_scale = 0.78
+cadence_scale = 0.88
+foot_lift = 0.045
+foot_lift_run = 0.08
+knee_forward = 0.85
+hip_bounce = 0.01
+hip_sway_deg = 2.5
+hip_drop_deg = 5.0
+torso_lean_deg = 9.0
+torso_twist_deg = 2.5
+arm_swing_deg = 14.0
+arm_bias_deg = 16.0
+elbow_bend_deg = 30.0
+head_bob = 0.012

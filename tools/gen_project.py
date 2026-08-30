@@ -108,6 +108,27 @@ def _debug_section(warning_levels: dict[str, int]) -> str:
     )
 
 
+def _wav_import() -> str:
+    """Preset de import dos .wav gerados.
+
+    Existe por um defeito encontrado medindo. O padrão do Godot 4.3+ para .wav é
+    `compress/mode=2` — QOA, que é **com perda**. Num projeto que gera cada byte de som por
+    síntese e recusa textura de imagem, deixar o importador recomprimir o banco inteiro com
+    perda é exatamente o tipo de transformação escondida que a regra inegociável existe para
+    barrar: o que toca não seria o que `make audio` produziu.
+
+    Tem consequência prática além do princípio: `ProceduralVoice` costura uma fala
+    concatenando os bytes de várias sílabas, e bytes de QOA não se concatenam. Com o padrão
+    do Godot a voz saía muda, e foi assim que isto apareceu.
+
+    Fica em `[importer_defaults]` e não num `.import` por arquivo porque `.import` é escrito
+    pelo próprio Godot a cada import: gerar quarenta deles daria uma briga de quem escreve
+    por último. Aqui é uma linha, versionada com o resto da configuração.
+    """
+    entries = ",\n".join(f'"{key}": {value}' for key, value in P.WAV_IMPORT.items())
+    return "wav={\n%s\n}" % entries
+
+
 def render(warning_levels: dict[str, int] | None = None) -> str:
     levels = DEFAULT_WARNING_LEVELS if warning_levels is None else warning_levels
     return f"""{GENERATED_HEADER('tools/gen_project.py', 'tools/params.py', ';')}
@@ -132,6 +153,10 @@ buses/default_bus_layout="{P.AUDIO_BUS_LAYOUT_PATH}"
 
 {_debug_section(levels)}
 
+[importer_defaults]
+
+{_wav_import()}
+
 [display]
 
 window/size/viewport_width={P.VIEWPORT_WIDTH}
@@ -147,6 +172,16 @@ window/vsync/vsync_mode={P.VSYNC_MODE}
 [layer_names]
 
 {_layer_section()}
+
+[navigation]
+
+; O mapa de navegação padrão tem de nascer com a mesma célula com que a região é assada.
+; Sem isto o Godot recusa a região inteira com "attempted to update a navigation region
+; with a navigation mesh that uses a cell_size of 1.0 while assigned to a navigation map
+; set to a cell_size of 0.25" — e o resultado é uma cidade com navegação vazia, em que
+; todo NPC fica parado achando que não há caminho.
+3d/default_cell_size={P.num(P.NAV_CELL_SIZE)}
+3d/default_cell_height={P.num(P.NAV_CELL_HEIGHT)}
 
 [physics]
 

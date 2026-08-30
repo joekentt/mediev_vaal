@@ -31,6 +31,21 @@ def write_if_changed(relative_path: str | Path, content: str) -> list[Path]:
     return [path]
 
 
+def write_bytes_if_changed(relative_path: str | Path, payload: bytes) -> list[Path]:
+    """Igual ao de cima, para arquivo binário. Devolve o que de fato foi tocado.
+
+    Existe pelo mesmo motivo que o irmão de texto: `make audio` roda dentro de `make all`,
+    e reescrever quarenta .wav idênticos a cada execução faria o Godot reimportar todos
+    eles — o que custa mais que gerar.
+    """
+    path = ROOT / relative_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.read_bytes() == payload:
+        return []
+    path.write_bytes(payload)
+    return [path]
+
+
 def report(step: str, written: list[Path]) -> None:
     """Log uniforme dos geradores."""
     if not written:
@@ -74,14 +89,24 @@ def find_godot() -> str:
     )
 
 
-def run_godot(args: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
-    """Roda o Godot neste projeto e devolve o processo terminado."""
+def run_godot(
+    args: list[str],
+    timeout: int | None = None,
+    environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
+    """Roda o Godot neste projeto e devolve o processo terminado.
+
+    `environment` substitui o ambiente inteiro do processo filho — passe um `os.environ`
+    copiado e alterado, e não só as chaves novas, senão o Godot perde `DISPLAY` e `PATH`.
+    """
     binary = find_godot()
     command = [binary, "--path", str(ROOT), *args]
     seconds = DEFAULT_GODOT_TIMEOUT if timeout is None else timeout
     print(f"  $ {' '.join(command)}")
     try:
-        return subprocess.run(command, capture_output=True, text=True, timeout=seconds)
+        return subprocess.run(
+            command, capture_output=True, text=True, timeout=seconds, env=environment
+        )
     except subprocess.TimeoutExpired as expired:
         # Sem o que o Godot chegou a imprimir, "não terminou" é indistinguível de um
         # erro de script que trava o jogo numa janela vazia. Mostre o que houver.
@@ -118,11 +143,25 @@ def ensure_imported() -> None:
     jogo direto falha com "Identifier not declared in the current scope" e a janela fica
     parada para sempre — que foi exatamente o que aconteceu depois de `make warnings`
     limpar o cache. Clone novo cai no mesmo buraco.
+
+    Existir não basta: o cache também fica **velho**. Uma classe nova com `class_name`
+    não entra nele até o próximo import, e um script rodado com `--script` falha a
+    compilar com "Could not find type X" — que é um erro de tipo, não de cache, e manda
+    quem lê procurar no lugar errado. Por isso a checagem é por data, e não por existência.
     """
-    if (ROOT / ".godot" / "global_script_class_cache.cfg").exists():
+    cache = ROOT / ".godot" / "global_script_class_cache.cfg"
+    if not cache.exists():
+        print("  (importando o projeto: o cache de classes globais não existe ainda)")
+        run_godot(["--headless", "--import"])
         return
-    print("  (importando o projeto: o cache de classes globais não existe ainda)")
-    run_godot(["--headless", "--import"])
+
+    stamp = cache.stat().st_mtime
+    for folder in ("generators", "scripts", "tools"):
+        for script in (ROOT / folder).rglob("*.gd"):
+            if script.stat().st_mtime > stamp:
+                print(f"  (reimportando: {script.relative_to(ROOT)} é mais novo que o cache)")
+                run_godot(["--headless", "--import"])
+                return
 
 
 def fail(message: str) -> None:

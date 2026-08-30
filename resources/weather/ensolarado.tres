@@ -1,0 +1,23 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_daycycle.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_resource type="Resource" script_class="WeatherProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/weather_profile.gd" id="1_weather"]
+
+[resource]
+script = ExtResource("1_weather")
+id = &"ensolarado"
+label = "Ensolarado"
+sun_scale = 1
+ambient_scale = 1
+fog_scale = 1
+fog_tint = Color(0.729412, 0.686275, 0.584314, 1.0)
+fog_tint_amount = 0
+sky_gray = 0
+rain = 0
+wind_scale = 1
+muffle_hz = 20000
+ambience_db = 0

@@ -1,0 +1,13 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_schedules.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_resource type="Resource" script_class="NPCSchedule" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/npc_schedule.gd" id="1_npc_schedule"]
+
+[resource]
+script = ExtResource("1_npc_schedule")
+archetype = &"artesao"
+blocks = Array[Dictionary]([{"start": 5.5, "end": 7.0, "marker": &"casa", "state": &"WORK"}, {"start": 7.0, "end": 13.0, "marker": &"trabalho", "state": &"WORK"}, {"start": 13.0, "end": 14.0, "marker": &"praca", "state": &"SOCIALIZE"}, {"start": 14.0, "end": 19.0, "marker": &"trabalho", "state": &"WORK"}, {"start": 19.0, "end": 22.0, "marker": &"taverna", "state": &"SOCIALIZE"}, {"start": 22.0, "end": 29.5, "marker": &"casa", "state": &"SLEEP"}])

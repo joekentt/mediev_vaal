@@ -1,0 +1,20 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_dialogues.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_resource type="Resource" script_class="DialogueTree" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/dialogue_tree.gd" id="1_dialogue_tree"]
+
+[resource]
+script = ExtResource("1_dialogue_tree")
+id = &"ferreiro_encomenda"
+speaker = "Ferreiro"
+start = &"inicio"
+nodes = Array[Dictionary]([
+	{"id": &"inicio", "text": "Se veio pedir pressa, já aviso: o ferro não escuta.", "choices": [{"text": "Vim só olhar.", "goto": &"olhar"}, {"text": "Posso ajudar no fole.", "goto": &"ajuda", "effects": [{"type": &"reputacao", "key": &"vilarejo", "value": 5}]}, {"text": "Soube que a estrada anda vazia.", "goto": &"estrada", "conditions": [{"type": &"flag", "key": &"ouviu_do_silencio", "compare": "==", "value": true}]}]},
+	{"id": &"olhar", "text": "Olhe de longe. Fagulha não pergunta de quem é o braço.", "choices": [{"text": "Justo.", "goto": &""}]},
+	{"id": &"ajuda", "text": "Então segure firme. Isto aqui vira foice antes do meio-dia.", "choices": [{"text": "Combinado.", "goto": &""}]},
+	{"id": &"estrada", "text": "Vazia há três feiras. Encomenda parada é ferro parado.", "choices": [{"text": "Vou ficar de olho.", "goto": &""}]},
+])

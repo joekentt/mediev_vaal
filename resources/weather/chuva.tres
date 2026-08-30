@@ -1,0 +1,23 @@
+; ARQUIVO GERADO — NÃO EDITE À MÃO.
+; Gerado por: tools/gen_daycycle.py
+; Fonte:      tools/params.py
+; Regenerar:  make all
+
+[gd_resource type="Resource" script_class="WeatherProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/weather_profile.gd" id="1_weather"]
+
+[resource]
+script = ExtResource("1_weather")
+id = &"chuva"
+label = "Chuva"
+sun_scale = 0.3
+ambient_scale = 0.7
+fog_scale = 3.1
+fog_tint = Color(0.662745, 0.666667, 0.65098, 1.0)
+fog_tint_amount = 0.75
+sky_gray = 0.8
+rain = 1
+wind_scale = 1.8
+muffle_hz = 1400
+ambience_db = -3

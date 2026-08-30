@@ -36,18 +36,15 @@ func _initialize() -> void:
 	_capture.call_deferred()
 
 
+## Constrói o mundo direto, sem passar por `main.tscn`: a cena principal abre no menu
+## desde o MVP, e as capturas querem o vale, não a tela de título.
 func _capture() -> void:
-	var packed: PackedScene = ResourceLoader.load(SCENE_PATH) as PackedScene
-	if packed == null:
-		push_error("Não consegui carregar %s" % SCENE_PATH)
-		quit(1)
-		return
+	var holder: Node3D = Node3D.new()
+	root.add_child(holder)
+	_root = WorldGenerator.build_stage(holder)
 
-	_root = packed.instantiate() as Node3D
-	root.add_child(_root)
-
-	# O mundo é construído no `_ready` da cena; sem esperar, a primeira captura sairia
-	# de um mundo pela metade.
+	# O assado de navegação e o LOD precisam de alguns quadros para assentar; sem esperar,
+	# a primeira captura sairia de um mundo pela metade.
 	for _frame: int in Params.BENCH_WARMUP_FRAMES:
 		await process_frame
 
@@ -57,11 +54,15 @@ func _capture() -> void:
 	root.add_child(_camera)
 	_camera.make_current()
 
+	# Mesma hora e mesmo tempo em toda execução: as capturas existem para comparar com as
+	# da rodada passada, e duas fotos do mesmo ponto sob céus diferentes não se comparam.
+	WorldGenerator.pin_sky(_root, Params.SHOT_HOUR)
+
 	var written: Array[String] = []
 	for shot: Array in Params.SHOT_POINTS:
 		var shot_name: String = String(shot[0])
-		_camera.global_position = shot[1]
-		_camera.look_at(shot[2], Vector3.UP)
+		_camera.global_position = _above_ground(shot[1], Params.BENCH_CAMERA_CLEARANCE)
+		_camera.look_at(_above_ground(shot[2], 0.0), Vector3.UP)
 
 		for _frame: int in Params.SCREENSHOT_WAIT_FRAMES:
 			await RenderingServer.frame_post_draw
@@ -73,6 +74,21 @@ func _capture() -> void:
 
 	print(RESULT_PREFIX + JSON.stringify({"shots": written, "dir": Params.SHOTS_DIR}))
 	quit(0)
+
+
+## Levanta um ponto até o relevo, tratando a altura escrita em `SHOT_POINTS` como piso.
+##
+## Os pontos são fixos e o vale muda com a seed. Sem isto, uma seed que levantasse o
+## terreno naquele ponto punha a câmera **por baixo** do chão — e o que se grava então não
+## é um vale ruim, é o nada: o terreno some por backface culling, as árvores ficam boiando
+## no ar e o marrom do hemisfério inferior do céu toma metade do quadro. Já aconteceu, e
+## demorou uma rodada de `make preview` para alguém desconfiar de que a cena estava certa e
+## a câmera é que estava enterrada.
+func _above_ground(point: Vector3, clearance: float) -> Vector3:
+	var field: HeightField = WorldGenerator.last_field
+	if field == null:
+		return point
+	return Vector3(point.x, maxf(point.y, field.height_at(point.x, point.z) + clearance), point.z)
 
 
 func _save(path: String) -> bool:
